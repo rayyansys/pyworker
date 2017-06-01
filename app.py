@@ -9,6 +9,7 @@ import logging
 import re
 import urlparse
 import traceback
+from contextlib import contextmanager
 import psycopg2
 import yaml
 import dateutil.relativedelta
@@ -40,6 +41,8 @@ class DBConnector(object):
         self._connection.close(); 
         logger.info("Disconnected from DelayedJob database")
 
+class TimeoutException(Exception): pass
+
 class Worker(object):
     def __init__(self):
         super(Worker, self).__init__()
@@ -56,6 +59,19 @@ class Worker(object):
         pid = os.getpid()
         self.name = "host:%s pid:%d" % (hostname, pid)
 
+    @contextmanager
+    def _time_limit(self, seconds):
+        def signal_handler(signum, frame):
+            raise TimeoutException, "Execution expired. Either do " + \
+                "the job faster or raise max_run_time > %d seconds" % \
+                self.max_run_time
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(seconds)
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+
     def run(self):
         # continuously check for new jobs on specified queue from db
         self._cursor = self._connector.connect_database()
@@ -71,9 +87,10 @@ class Worker(object):
                     raise ValueError('Unsupported Job: %s' % job.class_name)
                 elif job is not None:
                     logger.info("Running Job %d" % job.job_id)
-                    job.before()
-                    job.run()
-                    job.after()
+                    with self._time_limit(self.max_run_time):
+                        job.before()
+                        job.run()
+                        job.after()
                     self._job_remove(job)
             except Exception as error:
                 error_str = traceback.format_exc()
