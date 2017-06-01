@@ -8,6 +8,7 @@ import datetime, time
 import logging
 import re
 import urlparse
+import traceback
 import psycopg2
 import yaml
 import dateutil.relativedelta
@@ -63,33 +64,38 @@ class Worker(object):
         while True:
             logger.debug('Picking up jobs...')
             job = self.get_job()
+            self._current_job = job # used in signal handlers
+            start_time = time.time()
             try:
                 if type(job) == Job:
                     raise ValueError('Unsupported Job: %s' % job.class_name)
                 elif job is not None:
-                    logger.debug("Running job %s" % str(job))
+                    logger.info("Running Job %d" % job.job_id)
                     job.before()
                     job.run()
                     job.after()
+                    self._job_remove(job)
             except Exception as error:
-                logger.error(str(error))
-                job.set_error_unlock(str(error))
+                error_str = traceback.format_exc()
+                self._job_set_error_unlock(job, error_str)
+            finally:
+                if job is not None:
+                    time_diff = time.time() - start_time
+                    logger.info("Job %d finished in %d seconds" % \
+                        (job.job_id, time_diff))
+
             time.sleep(self.sleep_delay)
 
     def get_job(self):
-        # TODO get 1 job from the specified queue
-        # if compatible job, run it
-        # otherwise raise an error
         def get_job_row():
-            now = datetime.datetime.utcnow()
-            expired = str(now - dateutil.relativedelta.relativedelta(
-                seconds=self.max_run_time))
-            now = str(now)
+            now = self._get_current_time()
+            expired = now - self._get_time_delta(seconds=self.max_run_time)
+            now, expired = str(now), str(expired)
             queues = self.queue_names.split(',')
             queues = ', '.join(["'%s'" % q for q in queues])
             query = '''
             UPDATE "delayed_jobs" SET locked_at = '%s', locked_by = '%s'
-            WHERE id IN (SELECT  "delayed_jobs"."id" FROM "delayed_jobs"
+            WHERE id IN (SELECT "delayed_jobs"."id" FROM "delayed_jobs"
                 WHERE ((run_at <= '%s'
                 AND (locked_at IS NULL OR locked_at < '%s')
                 OR locked_by = '%s') AND failed_at IS NULL)
@@ -97,6 +103,7 @@ class Worker(object):
             ORDER BY priority ASC, run_at ASC LIMIT 1 FOR UPDATE) RETURNING
                 id, attempts, handler
             ''' % (now, self.name, now, expired, self.name, queues)
+            logger.debug("query: %s" % query)
             self._cursor.execute(query)
             return self._cursor.fetchone()
 
@@ -106,20 +113,63 @@ class Worker(object):
         else:
             return None
         
+    def _get_current_time(self):
+        # TODO return timezone or utc? get config from user?
+        return datetime.datetime.utcnow()
+
+    def _get_time_delta(self, **kwargs):
+        return dateutil.relativedelta.relativedelta(**kwargs)
+
+    def _job_set_error_unlock(self, job, error):
+        logger.error("Job %d raised error: %s" % (job.job_id, error))
+        job.attempts += 1
+        now = self._get_current_time()
+        setters = [
+            'locked_at = null',
+            'locked_by = null',
+            'attempts = %d' % job.attempts,
+            'last_error = %s'
+        ]
+        values = [
+            error
+        ]
+        if job.attempts >= self.max_attempts:
+            # set failed_at = now
+            setters.append('failed_at = %s')
+            values.append(now)
+        else:
+            # set new exponential run_at
+            setters.append('run_at = %s')
+            delta = (job.attempts**4) + 5
+            values.append(str(now + self._get_time_delta(seconds=delta)))
+        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
+            (', '.join(setters), job.job_id)
+        logger.debug("set error query: %s" % query)
+        logger.debug("set error values: %s" % str(values))
+        self._cursor.execute(query, tuple(values))
+        self._connector.commit()
+
+    def _job_remove(self, job):
+        logger.debug("Job %d finished successfully" % job.job_id)
+        query = 'DELETE FROM delayed_jobs WHERE id = %d' % job.job_id
+        self._cursor.execute(query)
+        self._connector.commit()
+
     def _exit(self, signum, frame):
-        # TODO unlock any locked jobs
-        # TODO gracefully stop job (raise and catch?)
-        logger.info("Received signal: %d" % signum)
+        signal_name = 'SIGTERM' if signum == 15 else 'SIGINT'
+        logger.info("Received signal: %s" % signal_name)
+        self._job_set_error_unlock(self._current_job, signal_name)
         self._connector.disconnect_database()
         sys.exit(0)
 
 class Job(object):
     """docstring for Job"""
-    def __init__(self, class_name, attributes=None):
+    def __init__(self, class_name, job_id, attempts=0, attributes=None):
         super(Job, self).__init__()
         self.class_name = class_name
-        if attributes:
-            self.__dict__.update(attributes)
+        self.job_id = job_id
+        self.attempts = attempts
+        self.attributes = attributes
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
@@ -128,6 +178,7 @@ class Job(object):
     def from_row(cls, job_row):
         '''job_row is a tuple of (id, attempts, handler)'''
         def extract_class_name(line):
+            # TODO cache regex
             regex = re.compile('object: !ruby/object:(.+)')
             match = regex.match(line)
             if match:
@@ -148,14 +199,16 @@ class Job(object):
                     attributes.append(line)
             return attributes
 
-        handler = job_row[2].splitlines()
+        job_id, attempts, handler = job_row
+        handler = handler.splitlines()
 
         class_name = extract_class_name(handler[1])
-        logger.debug("Found class name: %s" % class_name) 
+        logger.debug("Found Job %d with class name: %s" % (job_id, class_name))
         try:
             klass = globals()[class_name]
         except KeyError:
-            return Job(class_name=class_name)
+            return Job(class_name=class_name,
+                job_id=job_id, attempts=attempts)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -165,11 +218,8 @@ class Job(object):
         logger.debug("payload object: %s" % str(payload))
 
         return klass(class_name=class_name,
+            job_id=job_id, attempts=attempts,
             attributes=payload['object']['attributes'])
-
-    def unlock(self):
-        pass
-        # TODO
 
     def before(self):
         logger.debug("Running Job.before hook")
@@ -177,9 +227,6 @@ class Job(object):
     def after(self):
         logger.debug("Running Job.after hook")
 
-    def set_error_unlock(self, error):
-        pass
-        # TODO
 
 class DedupJob(Job):
     def __init__(self, *args, **kwargs):
@@ -190,13 +237,14 @@ class DedupJob(Job):
         # TODO
 
     def run(self):
-        logger.debug("Running DedupJob.run")
+        logger.info("Running DedupJob.run")
+        time.sleep(120)
         # TODO
 
 if __name__ == "__main__":
     load_dotenv(find_dotenv())
     logger = logging.getLogger('pyworker')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     w = Worker()
     w.sleep_delay = int(os.environ.get('DJ_SLEEP_DELAY', '5'))
     w.max_attempts = int(os.environ.get('DJ_MAX_ATTEMPTS', '3'))
