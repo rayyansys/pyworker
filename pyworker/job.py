@@ -19,13 +19,14 @@ class Job(object):
     """docstring for Job"""
     __metaclass__ = Meta
     def __init__(self, class_name, database, logger,
-        job_id, attempts=0, attributes=None):
+        job_id, attempts=0, max_attempts=1, attributes=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
         self.logger = logger
         self.job_id = job_id
         self.attempts = attempts
+        self.max_attempts = max_attempts
         self.attributes = attributes
 
     def __str__(self):
