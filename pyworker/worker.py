@@ -1,22 +1,17 @@
 import os, sys, signal, traceback
-import logging
 import datetime, time
 from contextlib import contextmanager
 import dateutil.relativedelta
 from db import DBConnector
 from job import Job
+from logger import Logger
 
 class TimeoutException(Exception): pass
 
 class Worker(object):
-    def __init__(self, dbstring):
+    def __init__(self, dbstring, logger=None):
         super(Worker, self).__init__()
-        logging.basicConfig()
-        self.logger = logging.getLogger('pyworker')
-        if os.environ.get('DEBUG', '0') == '1':
-            self.logger.setLevel(logging.DEBUG)
-        else:
-            self.logger.setLevel(logging.INFO)
+        self.logger = Logger(logger)
         self.logger.info('Starting pyworker...')
         self.database = DBConnector(dbstring, self.logger)
         self.sleep_delay = 10
