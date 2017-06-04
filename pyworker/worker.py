@@ -18,7 +18,7 @@ class Worker(object):
         else:
             self.logger.setLevel(logging.INFO)
         self.logger.info('Starting pyworker...')
-        self._connector = DBConnector(dbstring, self.logger)
+        self.database = DBConnector(dbstring, self.logger)
         self.sleep_delay = 10
         self.max_attempts = 3
         self.max_run_time = 3600
@@ -42,7 +42,7 @@ class Worker(object):
 
     def run(self):
         # continuously check for new jobs on specified queue from db
-        self._cursor = self._connector.connect_database()
+        self._cursor = self.database.connect().cursor()
         signal.signal(signal.SIGINT, self._exit)
         signal.signal(signal.SIGTERM, self._exit)
         while True:
@@ -133,19 +133,19 @@ class Worker(object):
         self.logger.debug('set error query: %s' % query)
         self.logger.debug('set error values: %s' % str(values))
         self._cursor.execute(query, tuple(values))
-        self._connector.commit()
+        self.database.commit()
 
     def _job_remove(self, job):
         self.logger.debug('Job %d finished successfully' % job.job_id)
         query = 'DELETE FROM delayed_jobs WHERE id = %d' % job.job_id
         self._cursor.execute(query)
-        self._connector.commit()
+        self.database.commit()
 
     def _exit(self, signum, frame):
         signal_name = 'SIGTERM' if signum == 15 else 'SIGINT'
         self.logger.info('Received signal: %s' % signal_name)
         if self._current_job:
             self._job_set_error_unlock(self._current_job, signal_name)
-        self._connector.disconnect_database()
+        self.database.disconnect()
         sys.exit(0)
 
