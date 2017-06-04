@@ -98,7 +98,7 @@ Install the code for development:
 
     git clone https://github.com/rayyanqcri/rayyan-pyworker.git
     cd rayyan-pyworker
-    python setup.py development
+    python setup.py develop
 
 Do your changes, then send a pull request.
 
