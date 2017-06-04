@@ -1,5 +1,6 @@
 import re
 import yaml
+from util import get_current_time, get_time_delta
 
 _job_class_registry = {}
 
@@ -17,10 +18,11 @@ class Meta(type):
 class Job(object):
     """docstring for Job"""
     __metaclass__ = Meta
-    def __init__(self, class_name, logger,
+    def __init__(self, class_name, database, logger,
         job_id, attempts=0, attributes=None):
         super(Job, self).__init__()
         self.class_name = class_name
+        self.database = database
         self.logger = logger
         self.job_id = job_id
         self.attempts = attempts
@@ -30,7 +32,7 @@ class Job(object):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
 
     @classmethod
-    def from_row(cls, job_row, logger):
+    def from_row(cls, job_row, max_attempts, database, logger):
         '''job_row is a tuple of (id, attempts, handler)'''
         def extract_class_name(line):
             # TODO cache regex
@@ -63,7 +65,8 @@ class Job(object):
             target_class = _job_class_registry[class_name]
         except KeyError:
             return Job(class_name=class_name, logger=logger,
-                job_id=job_id, attempts=attempts)
+                max_attempts=max_attempts,
+                job_id=job_id, attempts=attempts, database=database)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -73,7 +76,8 @@ class Job(object):
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
-            job_id=job_id, attempts=attempts,
+            job_id=job_id, attempts=attempts, database=database,
+            max_attempts=max_attempts,
             attributes=payload['object']['attributes'])
 
     def before(self):
@@ -82,3 +86,37 @@ class Job(object):
     def after(self):
         self.logger.debug("Running Job.after hook")
 
+    def set_error_unlock(self, error):
+        self.logger.error('Job %d raised error: %s' % (self.job_id, error))
+        self.attempts += 1
+        now = get_current_time()
+        setters = [
+            'locked_at = null',
+            'locked_by = null',
+            'attempts = %d' % self.attempts,
+            'last_error = %s'
+        ]
+        values = [
+            error
+        ]
+        if self.attempts >= self.max_attempts:
+            # set failed_at = now
+            setters.append('failed_at = %s')
+            values.append(now)
+        else:
+            # set new exponential run_at
+            setters.append('run_at = %s')
+            delta = (self.attempts**4) + 5
+            values.append(str(now + get_time_delta(seconds=delta)))
+        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
+            (', '.join(setters), self.job_id)
+        self.logger.debug('set error query: %s' % query)
+        self.logger.debug('set error values: %s' % str(values))
+        self.database.cursor().execute(query, tuple(values))
+        self.database.commit()
+
+    def remove(self):
+        self.logger.debug('Job %d finished successfully' % self.job_id)
+        query = 'DELETE FROM delayed_jobs WHERE id = %d' % self.job_id
+        self.database.cursor().execute(query)
+        self.database.commit()

@@ -14,3 +14,14 @@ class Logger(object):
         except:
             print "INFO: %s" % message
 
+    def warning(self, message):
+        try:
+            self.logger.warning(message)
+        except:
+            print "WARNING: %s" % message
+
+    def error(self, message):
+        try:
+            self.logger.error(message)
+        except:
+            print "ERROR: %s" % message

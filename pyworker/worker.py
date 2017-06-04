@@ -1,10 +1,10 @@
 import os, sys, signal, traceback
-import datetime, time
+import time
 from contextlib import contextmanager
-import dateutil.relativedelta
 from db import DBConnector
 from job import Job
 from logger import Logger
+from util import get_current_time, get_time_delta
 
 class TimeoutException(Exception): pass
 
@@ -55,10 +55,10 @@ class Worker(object):
                         job.before()
                         job.run()
                         job.after()
-                    self._job_remove(job)
+                    job.remove()
             except Exception:
                 error_str = traceback.format_exc()
-                self._job_set_error_unlock(job, error_str)
+                job.set_error_unlock(error_str)
             finally:
                 if job is not None:
                     time_diff = time.time() - start_time
@@ -69,8 +69,8 @@ class Worker(object):
 
     def get_job(self):
         def get_job_row():
-            now = self._get_current_time()
-            expired = now - self._get_time_delta(seconds=self.max_run_time)
+            now = get_current_time()
+            expired = now - get_time_delta(seconds=self.max_run_time)
             now, expired = str(now), str(expired)
             queues = self.queue_names.split(',')
             queues = ', '.join(["'%s'" % q for q in queues])
@@ -90,57 +90,16 @@ class Worker(object):
 
         job_row = get_job_row()
         if job_row:
-            return Job.from_row(job_row, self.logger)
+            return Job.from_row(job_row, max_attempts=self.max_attempts,
+                database=self.database, logger=self.logger)
         else:
             return None
         
-    def _get_current_time(self):
-        # TODO return timezone or utc? get config from user?
-        return datetime.datetime.utcnow()
-
-    def _get_time_delta(self, **kwargs):
-        return dateutil.relativedelta.relativedelta(**kwargs)
-
-    def _job_set_error_unlock(self, job, error):
-        self.logger.error('Job %d raised error: %s' % (job.job_id, error))
-        job.attempts += 1
-        now = self._get_current_time()
-        setters = [
-            'locked_at = null',
-            'locked_by = null',
-            'attempts = %d' % job.attempts,
-            'last_error = %s'
-        ]
-        values = [
-            error
-        ]
-        if job.attempts >= self.max_attempts:
-            # set failed_at = now
-            setters.append('failed_at = %s')
-            values.append(now)
-        else:
-            # set new exponential run_at
-            setters.append('run_at = %s')
-            delta = (job.attempts**4) + 5
-            values.append(str(now + self._get_time_delta(seconds=delta)))
-        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
-            (', '.join(setters), job.job_id)
-        self.logger.debug('set error query: %s' % query)
-        self.logger.debug('set error values: %s' % str(values))
-        self._cursor.execute(query, tuple(values))
-        self.database.commit()
-
-    def _job_remove(self, job):
-        self.logger.debug('Job %d finished successfully' % job.job_id)
-        query = 'DELETE FROM delayed_jobs WHERE id = %d' % job.job_id
-        self._cursor.execute(query)
-        self.database.commit()
-
     def _exit(self, signum, frame):
         signal_name = 'SIGTERM' if signum == 15 else 'SIGINT'
         self.logger.info('Received signal: %s' % signal_name)
         if self._current_job:
-            self._job_set_error_unlock(self._current_job, signal_name)
+            self._current_job.set_error_unlock(signal_name)
         self.database.disconnect()
         sys.exit(0)
 
