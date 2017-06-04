@@ -81,6 +81,17 @@ configuration options:
     # queue names to poll from the datbase, comma separated (default: 'default')
     w.queue_names = 'queue1,queue2'
 
+Youc an also provide a logger class (from `logging` module) to have full control on logging configuration:
+
+    import logging
+    
+    logging.basicConfig()
+    logger = logging.getLogger('pyworker')
+    logger.setLevel(logging.INFO)
+
+    w = Worker(dbstring, logger)
+    w.run()
+
 ## Limitations
 
 - Only supports Postgres databases
