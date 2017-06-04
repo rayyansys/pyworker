@@ -12,18 +12,21 @@ class DBConnector(object):
         self._port = url.port
         self.logger = logger
 
-    def connect_database(self): 
+    def connect(self): 
         self._connection = psycopg2.connect(database=self._database,
             user=self._username, password=self._passwd,
             host=self._host, port=self._port)
         cursor = self._connection.cursor()
-        self.logger.info("Connected to DelayedJob database")
-        return cursor
+        self.logger.info("Connected to database")
+        return self
         
+    def cursor(self):
+        return self._connection.cursor()
+
     def commit(self):
         self._connection.commit()
 
-    def disconnect_database(self):
+    def disconnect(self):
         self._connection.close(); 
-        self.logger.info("Disconnected from DelayedJob database")
+        self.logger.info("Disconnected from database")
 
