@@ -60,9 +60,21 @@ Example job:
         def after(self):
             self.logger.debug("Running MyJob.after hook")
 
+        # optional
+        def success(self):
+            self.logger.debug("Running MyJob.success hook")
+
+        # optional
+        def error(self):
+            self.logger.debug("Running MyJob.error hook")
+
+        # optional
+        def failure(self):
+            self.logger.debug("Running MyJob.failure hook")
+
 Once this example job is declared, the worker can recognize it and
 will call its `run` method once it is picked up, optionally with the
-`before` and `after` hooks.
+specified hooks.
 
 ### Configuration
 
@@ -100,7 +112,6 @@ Youc an also provide a logger class (from `logging` module) to have full control
 - No access to your Ruby classes, you should implement all your logic from scratch in Python
 - Reads only raw attributes of jobs from the database (job table columns), no relations
 - Assumes you only need to call the `run` method in your job with no arguments
-- Only `before` and `after` hooks, no `success`, `error`, `failure` or `enqueue`.
 - No unit tests
 
 ## Contribute

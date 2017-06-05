@@ -13,4 +13,6 @@ logger = logging.getLogger('pyworker')
 logger.setLevel(logging.DEBUG)
 
 w = Worker(dbstring, logger) # logger is optional
+w.sleep_delay = 3
+w.max_run_time = 10
 w.run()

@@ -87,8 +87,19 @@ class Job(object):
     def after(self):
         self.logger.debug("Running Job.after hook")
 
+    def error(self, error):
+        self.logger.debug("Running Job.error hook")
+
+    def failure(self, error):
+        self.logger.debug("Running Job.failure hook")
+
+    def success(self):
+        self.logger.debug("Running Job.success hook")
+
     def set_error_unlock(self, error):
         self.logger.error('Job %d raised error: %s' % (self.job_id, error))
+        # run error hook
+        self.error(error)
         self.attempts += 1
         now = get_current_time()
         setters = [
@@ -104,6 +115,7 @@ class Job(object):
             # set failed_at = now
             setters.append('failed_at = %s')
             values.append(now)
+            self.failure(error)
         else:
             # set new exponential run_at
             setters.append('run_at = %s')

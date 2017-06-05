@@ -7,6 +7,7 @@ from logger import Logger
 from util import get_current_time, get_time_delta
 
 class TimeoutException(Exception): pass
+class TerminatedException(Exception): pass
 
 class Worker(object):
     def __init__(self, dbstring, logger=None):
@@ -35,37 +36,51 @@ class Worker(object):
         finally:
             signal.alarm(0)
 
+    @contextmanager
+    def _terminatable(self):
+        def signal_handler(signum, frame):
+            signal_name = 'SIGTERM' if signum == 15 else 'SIGINT'
+            self.logger.info('Received signal: %s' % signal_name)
+            raise TerminatedException(signal_name)
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        yield
+
     def run(self):
         # continuously check for new jobs on specified queue from db
         self._cursor = self.database.connect().cursor()
-        signal.signal(signal.SIGINT, self._exit)
-        signal.signal(signal.SIGTERM, self._exit)
-        while True:
-            self.logger.debug('Picking up jobs...')
-            job = self.get_job()
-            self._current_job = job # used in signal handlers
-            start_time = time.time()
-            try:
-                if type(job) == Job:
-                    raise ValueError(('Unsupported Job: %s, please import it ' \
-                        + 'before you can handle it') % job.class_name)
-                elif job is not None:
-                    self.logger.info('Running Job %d' % job.job_id)
-                    with self._time_limit(self.max_run_time):
-                        job.before()
-                        job.run()
-                        job.after()
-                    job.remove()
-            except Exception:
-                error_str = traceback.format_exc()
-                job.set_error_unlock(error_str)
-            finally:
-                if job is not None:
-                    time_diff = time.time() - start_time
-                    self.logger.info('Job %d finished in %d seconds' % \
-                        (job.job_id, time_diff))
-
-            time.sleep(self.sleep_delay)
+        with self._terminatable():
+            while True:
+                self.logger.debug('Picking up jobs...')
+                job = self.get_job()
+                self._current_job = job # used in signal handlers
+                start_time = time.time()
+                try:
+                    if type(job) == Job:
+                        raise ValueError(('Unsupported Job: %s, please import it ' \
+                            + 'before you can handle it') % job.class_name)
+                    elif job is not None:
+                        self.logger.info('Running Job %d' % job.job_id)
+                        with self._time_limit(self.max_run_time):
+                            job.before()
+                            job.run()
+                            job.after()
+                        job.success()
+                        job.remove()
+                    time.sleep(self.sleep_delay)
+                except Exception as exception:
+                    if job is not None:
+                        error_str = traceback.format_exc()
+                        job.set_error_unlock(error_str)
+                    if type(exception) == TerminatedException:
+                        break
+                finally:
+                    if job is not None:
+                        time_diff = time.time() - start_time
+                        self.logger.info('Job %d finished in %d seconds' % \
+                            (job.job_id, time_diff))
+            
+            self.database.disconnect()
 
     def get_job(self):
         def get_job_row():
@@ -94,12 +109,3 @@ class Worker(object):
                 database=self.database, logger=self.logger)
         else:
             return None
-        
-    def _exit(self, signum, frame):
-        signal_name = 'SIGTERM' if signum == 15 else 'SIGINT'
-        self.logger.info('Received signal: %s' % signal_name)
-        if self._current_job:
-            self._current_job.set_error_unlock(signal_name)
-        self.database.disconnect()
-        sys.exit(0)
-
