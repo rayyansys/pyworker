@@ -76,6 +76,9 @@ Once this example job is declared, the worker can recognize it and
 will call its `run` method once it is picked up, optionally with the
 specified hooks.
 
+A real-world example can be found [here](https://github.com/rayyanqcri/rayyan-dedup)
+(check [dedup_job.py](https://github.com/rayyanqcri/rayyan-dedup/blob/master/rayyandedup/dedup_job.py)).
+
 ### Configuration
 
 Before calling the `run` method on the worker, you have these
