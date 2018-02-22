@@ -6,7 +6,7 @@ class DBConnector(object):
         super(DBConnector, self).__init__()
         url = urlparse.urlparse(dbstring)
         self._database = url.path[1:]
-        self._username = url.username
+        self._username = url.username.replace('%40', '@')
         self._passwd = url.password
         self._host = url.hostname
         self._port = url.port
@@ -29,4 +29,3 @@ class DBConnector(object):
     def disconnect(self):
         self._connection.close(); 
         self.logger.info("Disconnected from database")
-
