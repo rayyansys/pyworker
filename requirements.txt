@@ -23,7 +23,6 @@ pyparsing==2.2.0
 python-dateutil==2.6.0
 python-dotenv==0.6.4
 PyYAML==3.12
--e git+https://github.com/rayyansys/rayyan-dedup@33bdd6a82a4b60d4005a226260084b96611ed37b#egg=rayyan_dedup
 rlr==2.4.3
 simplecosine==1.1
 simplejson==3.10.0

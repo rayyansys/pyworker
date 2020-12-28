@@ -1,8 +1,8 @@
-# pyworker
+# rubydj-pyworker
 
 A pure Python2.7 worker for Ruby-based DelayedJobs.
 
-## Why pyworker?
+## Why rubydj-pyworker?
 
 If you have a scientifc [Ruby on Rails](http://rubyonrails.org/) application,
 you may find yourself requiring background jobs to run in Python
@@ -21,11 +21,7 @@ the [delayed_job](https://github.com/collectiveidea/delayed_job) Ruby gem behavi
 
 ## Installation
 
-pyworker is still in early stages (see the Limitations below),
-so once it is in production stage, it can be hosted on PyPI.
-Currently, you can install it by the following `pip` command:
-
-    pip install -e git+https://github.com/rayyanqcri/rayyan-pyworker#egg=pyworker
+    pip install rubydj-pyworker
 
 ## Usage
 
@@ -76,8 +72,8 @@ Once this example job is declared, the worker can recognize it and
 will call its `run` method once it is picked up, optionally with the
 specified hooks.
 
-A real-world example can be found [here](https://github.com/rayyanqcri/rayyan-dedup)
-(check [dedup_job.py](https://github.com/rayyanqcri/rayyan-dedup/blob/master/rayyandedup/dedup_job.py)).
+A real-world example can be found [here](https://github.com/rayyansys/rayyan-dedup)
+(check [dedup_job.py](https://github.com/rayyansys/rayyan-dedup/blob/master/rayyandedup/dedup_job.py)).
 
 ### Configuration
 
@@ -121,12 +117,19 @@ Youc an also provide a logger class (from `logging` module) to have full control
 
 Install the code for development:
 
-    git clone https://github.com/rayyanqcri/rayyan-pyworker.git
-    cd rayyan-pyworker
+    git clone https://github.com/rayyansys/pyworker.git
+    cd pyworker
     python setup.py develop
 
 Do your changes, then send a pull request.
 
+## Publish
+
+1. Increment the version number in `setup.py`
+1. Install twine: `pip install twine`. You may need to upgrade pip first: `pip install --upgrade pip`
+1. Create the distribution files: `python setup.py sdist bdist_wheel`
+1. Optionally upload to [Test PyPi](https://test.pypi.org/) as a dry run: `twine upload -r testpypi dist/*`. You will need a separate account there
+1. Upload to [PyPi](https://pypi.org/): `twine upload dist/*`
 ## License
 
 Released under the MIT License.
