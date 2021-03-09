@@ -125,11 +125,23 @@ Do your changes, then send a pull request.
 
 ## Publish
 
+### Using Python
 1. Increment the version number in `setup.py`
 1. Install twine: `pip install twine`. You may need to upgrade pip first: `pip install --upgrade pip`
 1. Create the distribution files: `python setup.py sdist bdist_wheel`
 1. Optionally upload to [Test PyPi](https://test.pypi.org/) as a dry run: `twine upload -r testpypi dist/*`. You will need a separate account there
 1. Upload to [PyPi](https://pypi.org/): `twine upload dist/*`
+
+### Using Docker
+Increment the version as in the first step above then:
+
+```bash
+docker build . -t pyworker:0.1.0
+docker run -it --rm pyworker:0.1.0
+```
+
+Enter your PyPi username and password when prompted.
+
 ## License
 
 Released under the MIT License.
