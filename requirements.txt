@@ -22,7 +22,7 @@ PyLBFGS==0.2.0.5
 pyparsing==2.2.0
 python-dateutil==2.6.0
 python-dotenv==0.6.4
-PyYAML==3.12
+PyYAML==5.4
 rlr==2.4.3
 simplecosine==1.1
 simplejson==3.10.0
