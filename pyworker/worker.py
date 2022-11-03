@@ -3,7 +3,7 @@ import time
 from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
-from logger import Logger
+from pyworker.logger import Logger
 from pyworker.util import get_current_time, get_time_delta
 
 class TimeoutException(Exception): pass
