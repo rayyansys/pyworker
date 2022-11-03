@@ -1,6 +1,6 @@
 # rubydj-pyworker
 
-A pure Python2.7 worker for Ruby-based DelayedJobs.
+A pure Python2.7+ worker for Ruby-based DelayedJobs.
 
 ## Why rubydj-pyworker?
 
