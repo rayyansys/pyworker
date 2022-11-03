@@ -26,9 +26,9 @@ class Worker(object):
     @contextmanager
     def _time_limit(self, seconds):
         def signal_handler(signum, frame):
-            raise TimeoutException, 'Execution expired. Either do ' + \
-                'the job faster or raise max_run_time > %d seconds' % \
-                self.max_run_time
+            raise TimeoutException(('Execution expired. Either do ' + \
+                'the job faster or raise max_run_time > %d seconds') % \
+                self.max_run_time)
         signal.signal(signal.SIGALRM, signal_handler)
         signal.alarm(seconds)
         try:
