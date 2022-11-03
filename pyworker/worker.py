@@ -2,7 +2,7 @@ import os, sys, signal, traceback
 import time
 from contextlib import contextmanager
 from pyworker.db import DBConnector
-from job import Job
+from pyworker.job import Job
 from logger import Logger
 from util import get_current_time, get_time_delta
 
