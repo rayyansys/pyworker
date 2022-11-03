@@ -20,8 +20,10 @@ should subclass to implement your pure python jobs. It basically replicates
 the [delayed_job](https://github.com/collectiveidea/delayed_job) Ruby gem behavior.
 
 ## Installation
-
+### From Pypi:
     pip install rubydj-pyworker
+### From Github branch:
+    pip install git+https://github.com/rayyansys/pyworker.git@<branch_name>#egg=rubydj-pyworker
 
 ## Usage
 

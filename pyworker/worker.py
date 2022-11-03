@@ -1,10 +1,10 @@
 import os, sys, signal, traceback
 import time
 from contextlib import contextmanager
-from db import DBConnector
-from job import Job
-from logger import Logger
-from util import get_current_time, get_time_delta
+from pyworker.db import DBConnector
+from pyworker.job import Job
+from pyworker.logger import Logger
+from pyworker.util import get_current_time, get_time_delta
 
 class TimeoutException(Exception): pass
 class TerminatedException(Exception): pass
@@ -26,9 +26,9 @@ class Worker(object):
     @contextmanager
     def _time_limit(self, seconds):
         def signal_handler(signum, frame):
-            raise TimeoutException, 'Execution expired. Either do ' + \
-                'the job faster or raise max_run_time > %d seconds' % \
-                self.max_run_time
+            raise TimeoutException(('Execution expired. Either do ' + \
+                'the job faster or raise max_run_time > %d seconds') % \
+                self.max_run_time)
         signal.signal(signal.SIGALRM, signal_handler)
         signal.alarm(seconds)
         try:
