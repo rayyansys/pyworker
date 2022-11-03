@@ -1,4 +1,9 @@
-from urllib.parse import urlparse, parse_qs
+import sys
+major_version = sys.version_info.major
+if major_version == 2:
+    from urlparse import urlparse, parse_qs
+elif major_version == 3:
+    from urllib.parse import urlparse, parse_qs
 import psycopg2
 
 class DBConnector(object):
