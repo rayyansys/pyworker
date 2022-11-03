@@ -1,6 +1,6 @@
 import re
 import yaml
-from util import get_current_time, get_time_delta
+from pyworker.util import get_current_time, get_time_delta
 
 _job_class_registry = {}
 
