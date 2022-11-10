@@ -21,7 +21,10 @@ the [delayed_job](https://github.com/collectiveidea/delayed_job) Ruby gem behavi
 
 ## Installation
 ### From Pypi:
-    pip install rubydj-pyworker
+    pip install rubydj-pyworker==0.2.0
+
+You can also pick up any version from [Pypi](https://pypi.org/project/rubydj-pyworker/)
+that supports Python 2.7 (< 1.0.0).
 ### From Github branch:
     pip install git+https://github.com/rayyansys/pyworker.git@<branch_name>#egg=rubydj-pyworker
 
@@ -94,7 +97,7 @@ configuration options:
 Youc an also provide a logger class (from `logging` module) to have full control on logging configuration:
 
     import logging
-    
+
     logging.basicConfig()
     logger = logging.getLogger('pyworker')
     logger.setLevel(logging.INFO)
