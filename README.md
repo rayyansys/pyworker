@@ -21,10 +21,14 @@ the [delayed_job](https://github.com/collectiveidea/delayed_job) Ruby gem behavi
 
 ## Installation
 ### From Pypi:
-    pip install rubydj-pyworker
+#### For Python 2.7:  
+    pip install -Iv rubydj-pyworker==0.2.0
+#### For Python 3+:  
+    pip install -Iv rubydj-pyworker==1.0.0
+    
+
 ### From Github branch:
     pip install git+https://github.com/rayyansys/pyworker.git@<branch_name>#egg=rubydj-pyworker
-
 ## Usage
 
 The simplest usage is creating a worker and running it:

@@ -15,9 +15,8 @@ class Meta(type):
         return cls
 
 
-class Job(object):
+class Job(object, metaclass=Meta):
     """docstring for Job"""
-    __metaclass__ = Meta
     def __init__(self, class_name, database, logger,
         job_id, attempts=0, max_attempts=1, attributes=None):
         super(Job, self).__init__()
@@ -73,7 +72,7 @@ class Job(object):
         logger.debug("Found attributes: %s" % str(attributes))
 
         stripped = '\n'.join(['object:', '  attributes:'] + attributes)
-        payload = yaml.load(stripped)
+        payload = yaml.load(stripped, Loader=yaml.FullLoader)
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
