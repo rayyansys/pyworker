@@ -15,9 +15,8 @@ class Meta(type):
         return cls
 
 
-class Job(object):
+class Job(object, metaclass=Meta):
     """docstring for Job"""
-    __metaclass__ = Meta
     def __init__(self, class_name, database, logger,
         job_id, attempts=0, max_attempts=1, attributes=None):
         super(Job, self).__init__()
