@@ -18,7 +18,7 @@ class Meta(type):
 class Job(object, metaclass=Meta):
     """docstring for Job"""
     def __init__(self, class_name, database, logger,
-        job_id, attempts=0, max_attempts=1, attributes=None):
+        job_id, run_at, queue, attempts=0, max_attempts=1, attributes=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -27,6 +27,8 @@ class Job(object, metaclass=Meta):
         self.attempts = attempts
         self.max_attempts = max_attempts
         self.attributes = attributes
+        self.run_at = run_at
+        self.queue = queue
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
@@ -56,7 +58,7 @@ class Job(object, metaclass=Meta):
                     attributes.append(line)
             return attributes
 
-        job_id, attempts, handler = job_row
+        job_id, attempts, handler, run_at, queue = job_row
         handler = handler.splitlines()
 
         class_name = extract_class_name(handler[1])
@@ -65,7 +67,7 @@ class Job(object, metaclass=Meta):
             target_class = _job_class_registry[class_name]
         except KeyError:
             return Job(class_name=class_name, logger=logger,
-                max_attempts=max_attempts,
+                max_attempts=max_attempts, run_at=run_at, queue=queue,
                 job_id=job_id, attempts=attempts, database=database)
 
         attributes = extract_attributes(handler[2:])
@@ -77,7 +79,7 @@ class Job(object, metaclass=Meta):
 
         return target_class(class_name=class_name, logger=logger,
             job_id=job_id, attempts=attempts, database=database,
-            max_attempts=max_attempts,
+            max_attempts=max_attempts, run_at=run_at, queue=queue,
             attributes=payload['object']['attributes'])
 
     def before(self):
