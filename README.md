@@ -67,11 +67,11 @@ Example job:
             self.logger.debug("Running MyJob.success hook")
 
         # optional
-        def error(self):
+        def error(self, error):
             self.logger.debug("Running MyJob.error hook")
 
         # optional
-        def failure(self):
+        def failure(self, error):
             self.logger.debug("Running MyJob.failure hook")
 
 Once this example job is declared, the worker can recognize it and
