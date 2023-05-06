@@ -1,3 +1,6 @@
+import newrelic.agent
+newrelic.agent.initialize()
+
 import os, sys, signal, traceback
 import time
 from contextlib import contextmanager
@@ -22,6 +25,8 @@ class Worker(object):
         hostname = os.uname()[1]
         pid = os.getpid()
         self.name = 'host:%s pid:%d' % (hostname, pid)
+        self.instrumentaion_enabled = self.is_instrumentaion_enabled()
+        self.new_relic_application = newrelic.agent.register_application(timeout=10)
 
     @contextmanager
     def _time_limit(self, seconds):
@@ -61,12 +66,7 @@ class Worker(object):
                             + 'before you can handle it') % job.class_name)
                     elif job is not None:
                         self.logger.info('Running Job %d' % job.job_id)
-                        with self._time_limit(self.max_run_time):
-                            job.before()
-                            job.run()
-                            job.after()
-                        job.success()
-                        job.remove()
+                        self.execute_job(job, start_time)
                     time.sleep(self.sleep_delay)
                 except Exception as exception:
                     if job is not None:
@@ -97,7 +97,7 @@ class Worker(object):
                 OR locked_by = '%s') AND failed_at IS NULL)
                 AND delayed_jobs.queue IN (%s)
             ORDER BY priority ASC, run_at ASC LIMIT 1 FOR UPDATE) RETURNING
-                id, attempts, handler
+                id, attempts, handler, run_at, queue
             ''' % (now, self.name, now, expired, self.name, queues)
             self.logger.debug('query: %s' % query)
             self._cursor.execute(query)
@@ -109,3 +109,28 @@ class Worker(object):
                 database=self.database, logger=self.logger)
         else:
             return None
+
+    def execute_job(self, job, start_time):
+        if self.instrumentaion_enabled:
+            self.execute_job_with_instrumentation(job, start_time)
+        else:
+            self.execute_job_without_instrumentation(job)
+
+    def execute_job_with_instrumentation(self, job, start_time):
+        with newrelic.agent.BackgroundTask(self.new_relic_application, name=job.__class__.__name__+ '#run', group='DelayedJob'):
+            latency = start_time - job.run_at.timestamp()
+            newrelic.agent.record_custom_metric('Custom/DelayedJobQueueLatency/' + job.queue, latency)
+            newrelic.agent.record_custom_metric('Custom/DelayedJobQueueLatency/' + job.__class__.__name__, latency)
+            newrelic.agent.record_custom_metric('Custom/DelayedJobAttempts/' + job.__class__.__name__, job.attempts)
+            self.execute_job_without_instrumentation(job)
+
+    def execute_job_without_instrumentation(self, job):
+        with self._time_limit(self.max_run_time):
+            job.before()
+            job.run()
+            job.after()
+        job.success()
+        job.remove()
+
+    def is_instrumentaion_enabled(self):
+        return ("NEW_RELIC_LICENSE_KEY" in os.environ) and ("NEW_RELIC_APP_NAME" in os.environ)
