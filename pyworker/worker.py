@@ -89,7 +89,7 @@ class Worker(object):
                 newrelic.agent.record_custom_metrics([
                     ('Custom/DelayedJobQueueLatency/%s' % job.queue, latency),
                     ('Custom/DelayedJobLatency/%s' % job.class_name, latency),
-                    ('Custom/DelayedJobAttempts/%s' % job.class_name, job.attempts + 1)  # Add 1 since it 0-index
+                    ('Custom/DelayedJobAttempts/%s' % job.class_name, job.attempts)
                 ], application=self.newrelic_app)
 
                 yield task
