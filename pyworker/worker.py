@@ -1,5 +1,8 @@
+import newrelic.agent
+
 import os, sys, signal, traceback
 import time
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
@@ -22,6 +25,17 @@ class Worker(object):
         hostname = os.uname()[1]
         pid = os.getpid()
         self.name = 'host:%s pid:%d' % (hostname, pid)
+
+        # Configure NewRelic if ENV variables set
+        self.newrelic_app = None
+        NEW_RELIC_LICENSE_KEY = os.environ.get("NEW_RELIC_LICENSE_KEY")
+        NEW_RELIC_APP_NAME = os.environ.get("NEW_RELIC_APP_NAME")
+
+        # Register Application in NewRelic if configured
+        if NEW_RELIC_LICENSE_KEY and NEW_RELIC_APP_NAME:
+            self.logger.info('Initializing NewRelic Agent for: %s' % NEW_RELIC_APP_NAME)
+            newrelic.agent.initialize()
+            self.newrelic_app = newrelic.agent.register_application()
 
     @contextmanager
     def _time_limit(self, seconds):
@@ -46,6 +60,42 @@ class Worker(object):
         signal.signal(signal.SIGTERM, signal_handler)
         yield
 
+    @contextmanager
+    def _instrument(self, job, start_time):
+
+        def _latency(run_at, ran_at):
+
+            # Specify UTC timezone and convert to unix time
+            run_at_utc = run_at.replace(tzinfo=timezone.utc)
+            run_at_time = run_at_utc.timestamp()
+
+            # Difference between when the job was scheduled `run_at`
+            # and when the job actually started running `ran_at`
+            return ran_at - run_at_time
+
+        if self.newrelic_app:
+
+            latency = _latency(job.run_at, start_time)
+
+            with newrelic.agent.BackgroundTask(
+                    application=self.newrelic_app,
+                    name='%s#run' % job.class_name,
+                    group='DelayedJob') as task:
+
+                # Record a custom metrics
+                # 1) Custom/DelayedJobQueueLatency/<job.queue> => latency
+                # 2) Custom/DelayedJobLatency/<job.name> => latency
+                # 3) Custom/DelayedJobAttempts/<job.name> => attempts
+                newrelic.agent.record_custom_metrics([
+                    ('Custom/DelayedJobQueueLatency/%s' % job.queue, latency),
+                    ('Custom/DelayedJobLatency/%s' % job.class_name, latency),
+                    ('Custom/DelayedJobAttempts/%s' % job.class_name, job.attempts)
+                ], application=self.newrelic_app)
+
+                yield task
+        else:
+            yield
+
     def run(self):
         # continuously check for new jobs on specified queue from db
         self._cursor = self.database.connect().cursor()
@@ -60,13 +110,14 @@ class Worker(object):
                         raise ValueError(('Unsupported Job: %s, please import it ' \
                             + 'before you can handle it') % job.class_name)
                     elif job is not None:
-                        self.logger.info('Running Job %d' % job.job_id)
-                        with self._time_limit(self.max_run_time):
-                            job.before()
-                            job.run()
-                            job.after()
-                        job.success()
-                        job.remove()
+                        with self._instrument(job, start_time):
+                            self.logger.info('Running Job %d' % job.job_id)
+                            with self._time_limit(self.max_run_time):
+                                job.before()
+                                job.run()
+                                job.after()
+                            job.success()
+                            job.remove()
                     time.sleep(self.sleep_delay)
                 except Exception as exception:
                     if job is not None:
@@ -81,6 +132,10 @@ class Worker(object):
                             (job.job_id, time_diff))
             
             self.database.disconnect()
+
+            # If configured shutdown NewRelic Agent to upload data on shutdown
+            if self.newrelic_app:
+                newrelic.agent.shutdown_agent()
 
     def get_job(self):
         def get_job_row():
@@ -97,7 +152,7 @@ class Worker(object):
                 OR locked_by = '%s') AND failed_at IS NULL)
                 AND delayed_jobs.queue IN (%s)
             ORDER BY priority ASC, run_at ASC LIMIT 1 FOR UPDATE) RETURNING
-                id, attempts, handler
+                id, attempts, run_at, queue, handler
             ''' % (now, self.name, now, expired, self.name, queues)
             self.logger.debug('query: %s' % query)
             self._cursor.execute(query)

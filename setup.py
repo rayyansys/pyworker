@@ -3,7 +3,8 @@ from setuptools import setup
 requirements = [
     'psycopg2',
     'python-dateutil',
-    'PyYAML'
+    'PyYAML',
+    'newrelic'
 ]
 
 setup(

@@ -30,3 +30,4 @@ six==1.10.0
 Unidecode==0.4.20
 zope.index==4.3.0
 zope.interface==4.4.1
+newrelic==8.8.0
