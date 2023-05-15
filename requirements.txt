@@ -9,7 +9,7 @@ dedupe==1.6.13
 dedupe-hcluster==0.3.2
 DoubleMetaphone==0.1
 -e git+https://github.com/hammady/python-fastcluster@b676a2d3da4bb6c9d265cd268c9ecd8173a63360#egg=fastcluster
-future==0.16.0
+future==0.18.3
 haversine==0.4.5
 highered==0.2.1
 Levenshtein-search==1.4.4
