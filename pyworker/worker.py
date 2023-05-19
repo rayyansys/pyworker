@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
 from pyworker.logger import Logger
-from pyworker.util import get_current_time, get_time_delta, time_string_to_epoch, datetime_to_epoch
+from pyworker.util import get_current_time, get_time_delta
 
 class TimeoutException(Exception): pass
 class TerminatedException(Exception): pass
