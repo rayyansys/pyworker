@@ -35,7 +35,7 @@ class Job(object, metaclass=Meta):
 
     @classmethod
     def from_row(cls, job_row, max_attempts, database, logger):
-        '''job_row is a tuple of (id, attempts, handler)'''
+        '''job_row is a tuple of (id, attempts, run_at, queue, handler)'''
         def extract_class_name(line):
             # TODO cache regex
             regex = re.compile('object: !ruby/object:(.+)')
