@@ -63,17 +63,14 @@ class Worker(object):
     def _instrument(self, job):
 
         def _latency(job_run_at):
-
-            desired_start_time = time_string_to_epoch(job_run_at, '%Y-%m-%d %H:%M:%S.%f')
             # we stick to get_current_time() to match the one used in the UPDATE query
-            now = datetime_to_epoch(get_current_time())
+            now = get_current_time()
 
             # Difference between when the job was scheduled `desired_start_time`
             # and when the job actually started running `actual_start_datetime`
-            return now - desired_start_time
+            return (now - job_run_at).total_seconds()
 
         if self.newrelic_app:
-
             latency = _latency(job.run_at)
 
             with newrelic.agent.BackgroundTask(
