@@ -1,6 +1,7 @@
 # rubydj-pyworker
 
-A pure Python2.7+ worker for Ruby-based DelayedJobs.
+A pure Python2.7 worker for Ruby-based DelayedJobs.
+Note that Python 3.x is not supported.
 
 ## Why rubydj-pyworker?
 
