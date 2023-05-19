@@ -1,8 +1,7 @@
 import newrelic.agent
 
-import os, sys, signal, traceback
+import os, signal, traceback
 import time
-from datetime import datetime, timezone
 from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
@@ -61,21 +60,18 @@ class Worker(object):
         yield
 
     @contextmanager
-    def _instrument(self, job, start_time):
+    def _instrument(self, job):
 
-        def _latency(run_at, ran_at):
+        def _latency(job_run_at):
+            # we stick to get_current_time() to match the one used in the UPDATE query
+            now = get_current_time()
 
-            # Specify UTC timezone and convert to unix time
-            run_at_utc = run_at.replace(tzinfo=timezone.utc)
-            run_at_time = run_at_utc.timestamp()
-
-            # Difference between when the job was scheduled `run_at`
-            # and when the job actually started running `ran_at`
-            return ran_at - run_at_time
+            # Difference between when the job was scheduled `job_run_at`
+            # and when the job actually started running `now`
+            return (now - job_run_at).total_seconds()
 
         if self.newrelic_app:
-
-            latency = _latency(job.run_at, start_time)
+            latency = _latency(job.run_at)
 
             with newrelic.agent.BackgroundTask(
                     application=self.newrelic_app,
@@ -84,12 +80,12 @@ class Worker(object):
 
                 # Record a custom metrics
                 # 1) Custom/DelayedJobQueueLatency/<job.queue> => latency
-                # 2) Custom/DelayedJobLatency/<job.name> => latency
-                # 3) Custom/DelayedJobAttempts/<job.name> => attempts
+                # 2) Custom/DelayedJobMethodLatency/<job.name> => latency
+                # 3) Custom/DelayedJobMethodAttempts/<job.name> => attempts
                 newrelic.agent.record_custom_metrics([
                     ('Custom/DelayedJobQueueLatency/%s' % job.queue, latency),
-                    ('Custom/DelayedJobLatency/%s' % job.class_name, latency),
-                    ('Custom/DelayedJobAttempts/%s' % job.class_name, job.attempts)
+                    ('Custom/DelayedJobMethodLatency/%s' % job.class_name, latency),
+                    ('Custom/DelayedJobMethodAttempts/%s' % job.class_name, job.attempts)
                 ], application=self.newrelic_app)
 
                 yield task
@@ -110,7 +106,7 @@ class Worker(object):
                         raise ValueError(('Unsupported Job: %s, please import it ' \
                             + 'before you can handle it') % job.class_name)
                     elif job is not None:
-                        with self._instrument(job, start_time):
+                        with self._instrument(job):
                             self.logger.info('Running Job %d' % job.job_id)
                             with self._time_limit(self.max_run_time):
                                 job.before()
@@ -130,7 +126,7 @@ class Worker(object):
                         time_diff = time.time() - start_time
                         self.logger.info('Job %d finished in %d seconds' % \
                             (job.job_id, time_diff))
-            
+
             self.database.disconnect()
 
             # If configured shutdown NewRelic Agent to upload data on shutdown
