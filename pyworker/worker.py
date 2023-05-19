@@ -80,12 +80,12 @@ class Worker(object):
 
                 # Record a custom metrics
                 # 1) Custom/DelayedJobQueueLatency/<job.queue> => latency
-                # 2) Custom/DelayedJobLatency/<job.name> => latency
-                # 3) Custom/DelayedJobAttempts/<job.name> => attempts
+                # 2) Custom/DelayedJobMethodLatency/<job.name> => latency
+                # 3) Custom/DelayedJobMethodAttempts/<job.name> => attempts
                 newrelic.agent.record_custom_metrics([
                     ('Custom/DelayedJobQueueLatency/%s' % job.queue, latency),
-                    ('Custom/DelayedJobLatency/%s' % job.class_name, latency),
-                    ('Custom/DelayedJobAttempts/%s' % job.class_name, job.attempts)
+                    ('Custom/DelayedJobMethodLatency/%s' % job.class_name, latency),
+                    ('Custom/DelayedJobMethodAttempts/%s' % job.class_name, job.attempts)
                 ], application=self.newrelic_app)
 
                 yield task
