@@ -1,6 +1,7 @@
 # rubydj-pyworker
 
-A pure Python2.7+ worker for Ruby-based DelayedJobs.
+A pure Python 3.x worker for Ruby-based DelayedJobs.
+Note that Python 2.7 is not supported.
 
 ## Why rubydj-pyworker?
 
@@ -21,11 +22,11 @@ the [delayed_job](https://github.com/collectiveidea/delayed_job) Ruby gem behavi
 
 ## Installation
 ### From Pypi:
-#### For Python 2.7:
-    pip install -Iv rubydj-pyworker==0.2.0
-#### For Python 3+:
-    pip install -Iv rubydj-pyworker==1.0.0
 
+    pip install rubydj-pyworker
+
+You can also pick up any version from [Pypi](https://pypi.org/project/rubydj-pyworker/)
+that supports Python 3.x (>= 1.0.0).
 
 ### From Github branch:
     pip install git+https://github.com/rayyansys/pyworker.git@<branch_name>#egg=rubydj-pyworker

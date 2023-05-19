@@ -1,4 +1,4 @@
-FROM python:2.7-jessie
+FROM python:3.11
 
 LABEL maintainer="Hossam Hammady <github@hammady.net>"
 
