@@ -73,7 +73,7 @@ class Job(object):
         logger.debug("Found attributes: %s" % str(attributes))
 
         stripped = '\n'.join(['object:', '  attributes:'] + attributes)
-        payload = yaml.load(stripped)
+        payload = yaml.load(stripped, Loader=yaml.FullLoader)
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
