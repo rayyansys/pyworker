@@ -66,8 +66,8 @@ class Worker(object):
             # we stick to get_current_time() to match the one used in the UPDATE query
             now = get_current_time()
 
-            # Difference between when the job was scheduled `desired_start_time`
-            # and when the job actually started running `actual_start_datetime`
+            # Difference between when the job was scheduled `job_run_at`
+            # and when the job actually started running `now`
             return (now - job_run_at).total_seconds()
 
         if self.newrelic_app:
