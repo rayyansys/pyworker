@@ -114,7 +114,6 @@ class Worker(object):
                                 job.after()
                             job.success()
                             job.remove()
-                    time.sleep(self.sleep_delay)
                 except Exception as exception:
                     if job is not None:
                         error_str = traceback.format_exc()
@@ -126,6 +125,13 @@ class Worker(object):
                         time_diff = time.time() - start_time
                         self.logger.info('Job %d finished in %d seconds' % \
                             (job.job_id, time_diff))
+
+                # Sleep for a while between each job and break if received SIGTERM
+                try:
+                    time.sleep(self.sleep_delay)
+                except Exception as exception:
+                    if type(exception) == TerminatedException:
+                        break
 
             self.database.disconnect()
 
