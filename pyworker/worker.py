@@ -129,9 +129,8 @@ class Worker(object):
                 # Sleep for a while between each job and break if received SIGTERM
                 try:
                     time.sleep(self.sleep_delay)
-                except Exception as exception:
-                    if type(exception) == TerminatedException:
-                        break
+                except TerminatedException:
+                    break
 
             self.database.disconnect()
 
