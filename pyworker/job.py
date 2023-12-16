@@ -24,6 +24,7 @@ class Job(object, metaclass=Meta):
         self.database = database
         self.logger = logger
         self.job_id = job_id
+        self.job_name = '%s#run' % class_name
         self.attempts = attempts
         self.run_at = run_at
         self.queue = queue
@@ -100,6 +101,7 @@ class Job(object, metaclass=Meta):
         self.logger.debug("Running Job.success hook")
 
     def set_error_unlock(self, error):
+        failed = False
         self.logger.error('Job %d raised error: %s' % (self.job_id, error))
         # run error hook
         self.error(error)
@@ -115,6 +117,7 @@ class Job(object, metaclass=Meta):
             error
         ]
         if self.attempts >= self.max_attempts:
+            failed = True
             # set failed_at = now
             setters.append('failed_at = %s')
             values.append(now)
@@ -130,6 +133,7 @@ class Job(object, metaclass=Meta):
         self.logger.debug('set error values: %s' % str(values))
         self.database.cursor().execute(query, tuple(values))
         self.database.commit()
+        return failed
 
     def remove(self):
         self.logger.debug('Job %d finished successfully' % self.job_id)

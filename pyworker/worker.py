@@ -75,18 +75,16 @@ class Worker(object):
 
             with newrelic.agent.BackgroundTask(
                     application=self.newrelic_app,
-                    name='%s#run' % job.class_name,
+                    name=job.job_name,
                     group='DelayedJob') as task:
 
-                # Record a custom metrics
-                # 1) Custom/DelayedJobQueueLatency/<job.queue> => latency
-                # 2) Custom/DelayedJobMethodLatency/<job.name> => latency
-                # 3) Custom/DelayedJobMethodAttempts/<job.name> => attempts
-                newrelic.agent.record_custom_metrics([
-                    ('Custom/DelayedJobQueueLatency/%s' % job.queue, latency),
-                    ('Custom/DelayedJobMethodLatency/%s' % job.class_name, latency),
-                    ('Custom/DelayedJobMethodAttempts/%s' % job.class_name, job.attempts)
-                ], application=self.newrelic_app)
+                # Record custom attributes for the job transaction
+                newrelic.agent.add_custom_attribute('job_id', job.job_id)
+                newrelic.agent.add_custom_attribute('job_name', job.job_name)
+                newrelic.agent.add_custom_attribute('job_queue', job.queue)
+                newrelic.agent.add_custom_attribute('job_latency', latency)
+                newrelic.agent.add_custom_attribute('job_attempts', job.attempts)
+                # TODO report job.enqueue_attributes if available
 
                 yield task
         else:
@@ -100,35 +98,11 @@ class Worker(object):
                 self.logger.debug('Picking up jobs...')
                 job = self.get_job()
                 self._current_job = job # used in signal handlers
-                start_time = time.time()
                 try:
-                    if type(job) == Job:
-                        raise ValueError(('Unsupported Job: %s, please import it ' \
-                            + 'before you can handle it') % job.class_name)
-                    elif job is not None:
-                        with self._instrument(job):
-                            self.logger.info('Running Job %d' % job.job_id)
-                            with self._time_limit(self.max_run_time):
-                                job.before()
-                                job.run()
-                                job.after()
-                            job.success()
-                            job.remove()
-                except Exception as exception:
                     if job is not None:
-                        error_str = traceback.format_exc()
-                        job.set_error_unlock(error_str)
-                    if type(exception) == TerminatedException:
-                        break
-                finally:
-                    if job is not None:
-                        time_diff = time.time() - start_time
-                        self.logger.info('Job %d finished in %d seconds' % \
-                            (job.job_id, time_diff))
-
-                # Sleep for a while between each job and break if received SIGTERM
-                try:
-                    time.sleep(self.sleep_delay)
+                        self.handle_job(job)
+                    else: # sleep for a while before checking again for new jobs
+                        time.sleep(self.sleep_delay)
                 except TerminatedException:
                     break
 
@@ -165,3 +139,39 @@ class Worker(object):
                 database=self.database, logger=self.logger)
         else:
             return None
+
+    def handle_job(self, job):
+        with self._instrument(job):
+            start_time = time.time()
+            try:
+                if type(job) == Job:
+                    raise ValueError(('Unsupported Job: %s, please import it ' \
+                        + 'before you can handle it') % job.class_name)
+                else:
+                    self.logger.info('Running Job %d' % job.job_id)
+                    with self._time_limit(self.max_run_time):
+                        job.before()
+                        job.run()
+                        job.after()
+                    job.success()
+                    job.remove()
+                    # report success
+                    if self.newrelic_app:
+                        newrelic.agent.add_custom_attribute('error', False)
+                        newrelic.agent.add_custom_attribute('job_failure', False)
+            except Exception as exception:
+                # handle error
+                error_str = traceback.format_exc()
+                failed = job.set_error_unlock(error_str)
+                # report error
+                if self.newrelic_app:
+                    newrelic.agent.add_custom_attribute('error', True)
+                    newrelic.agent.add_custom_attribute('job_failure', failed)
+                    newrelic.agent.record_exception(exception)
+                # if that was a termination error, bubble up to caller
+                if type(exception) == TerminatedException:
+                    raise exception
+            finally:
+                time_diff = time.time() - start_time
+                self.logger.info('Job %d finished in %d seconds' % \
+                    (job.job_id, time_diff))
