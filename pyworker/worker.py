@@ -141,10 +141,12 @@ class Worker(object):
             return None
 
     def handle_job(self, job):
+        if job is None:
+            return
         with self._instrument(job):
             start_time = time.time()
             try:
-                if type(job) == Job:
+                if job.abstract:
                     raise ValueError(('Unsupported Job: %s, please import it ' \
                         + 'before you can handle it') % job.class_name)
                 else:

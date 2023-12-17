@@ -1,19 +1,30 @@
+import datetime
 from unittest import TestCase
-from unittest.mock import patch, MagicMock
-from pyworker.worker import Worker, TerminatedException
+from unittest.mock import patch, MagicMock, Mock
+from pyworker.worker import Worker, TerminatedException, get_current_time
 
 class TestWorker(TestCase):
     @patch('pyworker.worker.DBConnector')
     def setUp(self, mock_db):
-        self.dbstring = 'postgres://user:pass@host:1234/db'
         self.worker = Worker('dummy')
-        self.worker.newrelic_app = MagicMock()
         self.mock_db = mock_db
         mock_db.connect = MagicMock()
         mock_db.disconnect = MagicMock()
+        mocked_run_at = datetime.datetime(2023, 10, 7, 0, 0, 1)
+        self.mocked_now = datetime.datetime(2023, 10, 7, 0, 0, 10)
+        self.mocked_latency = 9 # seconds: mocked_now - mocked_run_at
+        self.mock_job = MagicMock(
+            abstract=False,
+            job_id=1,
+            job_name='test_job',
+            queue='default',
+            attempts=0,
+            run_at=mocked_run_at)
 
     def tearDown(self):
         pass
+
+    #********** __init__ tests **********#
 
     @patch('pyworker.worker.os.uname', return_value=['pytest', 'localhost'])
     @patch('pyworker.worker.os.getpid', return_value=1234)
@@ -28,6 +39,8 @@ class TestWorker(TestCase):
         self.assertEqual(worker.queue_names, 'default')
         self.assertEqual(worker.name, 'host:localhost pid:1234')
 
+    #********** .run tests **********#
+
     @patch('pyworker.worker.Worker.get_job', return_value=None)
     # make sleep raise an exception to stop the loop
     @patch('pyworker.worker.time.sleep', side_effect=TerminatedException('SIGTERM'))
@@ -41,6 +54,8 @@ class TestWorker(TestCase):
     @patch('pyworker.worker.time.sleep', side_effect=TerminatedException('SIGTERM'))
     @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
     def test_worker_run_shuts_down_newrelic_agent(self, newrelic_agent, *_):
+        self.worker.newrelic_app = MagicMock()
+
         self.worker.run()
 
         newrelic_agent.shutdown_agent.assert_called_once_with()
@@ -60,3 +75,118 @@ class TestWorker(TestCase):
 
         mock_get_job.assert_called_once_with()
         mock_handle_job.assert_called_once_with(mock_get_job.return_value)
+
+    #********** .handle_job tests **********#
+
+    def assert_instrument_context_reports_custom_attributes(self, job, newrelic_agent):
+        newrelic_agent.BackgroundTask.assert_called_once()
+        newrelic_agent.add_custom_attribute.assert_any_call('job_id', job.job_id)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_name', job.job_name)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_queue', job.queue)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_latency', self.mocked_latency)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_attempts', job.attempts)
+
+    def test_worker_handle_job_when_job_is_none_does_nothing(self):
+        self.worker.handle_job(None) # no error raised
+
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_job_is_unsupported_type_sets_error(self, newrelic_agent):
+        job = self.mock_job
+        job.abstract = True
+
+        self.worker.handle_job(job)
+
+        job.set_error_unlock.assert_called_once()
+        assert 'Unsupported Job' in job.set_error_unlock.call_args[0][0]
+
+    @patch('pyworker.worker.get_current_time')
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_job_is_unsupported_type_reports_error_to_newrelic(
+            self, newrelic_agent, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.abstract = True
+        self.worker.newrelic_app = MagicMock()
+
+        self.worker.handle_job(job)
+
+        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
+        newrelic_agent.record_exception.assert_called_once()
+        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
+
+    def test_worker_handle_job_calls_all_hooks_then_removes_from_queue(self):
+        self.worker.handle_job(self.mock_job)
+
+        self.mock_job.before.assert_called_once()
+        self.mock_job.run.assert_called_once()
+        self.mock_job.after.assert_called_once()
+        self.mock_job.success.assert_called_once()
+
+        self.mock_job.remove.assert_called_once()
+
+    @patch('pyworker.worker.get_current_time')
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_no_errors_reports_success_to_newrelic(
+            self, newrelic_agent, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        self.worker.newrelic_app = MagicMock()
+
+        self.worker.handle_job(self.mock_job)
+
+        self.assert_instrument_context_reports_custom_attributes(self.mock_job, newrelic_agent)
+        newrelic_agent.record_exception.assert_not_called()
+        newrelic_agent.add_custom_attribute.assert_any_call('error', False)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', False)
+
+    def test_worker_handle_job_when_error_sets_error_and_unlocks_job(self):
+        job = self.mock_job
+        job.run.side_effect = Exception('test error')
+
+        self.worker.handle_job(job)
+
+        job.set_error_unlock.assert_called_once()
+        assert 'test error' in job.set_error_unlock.call_args[0][0]
+        job.remove.assert_not_called()
+
+    @patch('pyworker.worker.get_current_time')
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_error_report_to_newrelic(self,
+            newrelic_agent, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.set_error_unlock.return_value = False
+        job.run.side_effect = Exception('test error')
+        self.worker.newrelic_app = MagicMock()
+
+        self.worker.handle_job(job)
+
+        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
+        newrelic_agent.record_exception.assert_called_once()
+        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', False)
+        job.remove.assert_not_called()
+
+    @patch('pyworker.worker.get_current_time')
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_permanent_error_reports_failure_to_newrelic(
+            self, newrelic_agent, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.set_error_unlock.return_value = True
+        job.run.side_effect = Exception('test error')
+        self.worker.newrelic_app = MagicMock()
+
+        self.worker.handle_job(job)
+
+        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
+        newrelic_agent.record_exception.assert_called_once()
+        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
+        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', True)
+        job.remove.assert_not_called()
+
+    def test_worker_handle_job_when_error_is_termination_error_bubbles_up(self):
+        job = self.mock_job
+        job.run.side_effect = TerminatedException('SIGTERM')
+
+        with self.assertRaises(TerminatedException):
+            self.worker.handle_job(job)

@@ -18,7 +18,8 @@ class Meta(type):
 class Job(object, metaclass=Meta):
     """docstring for Job"""
     def __init__(self, class_name, database, logger,
-        job_id, queue, run_at, attempts=0, max_attempts=1, attributes=None):
+                 job_id, queue, run_at, attempts=0, max_attempts=1,
+                 attributes=None, abstract=False):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -30,6 +31,7 @@ class Job(object, metaclass=Meta):
         self.queue = queue
         self.max_attempts = max_attempts
         self.attributes = attributes
+        self.abstract = abstract
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
@@ -70,7 +72,8 @@ class Job(object, metaclass=Meta):
             return Job(class_name=class_name, logger=logger,
                 max_attempts=max_attempts,
                 job_id=job_id, attempts=attempts,
-                run_at=run_at, queue=queue, database=database)
+                run_at=run_at, queue=queue, database=database,
+                abstract=True)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
