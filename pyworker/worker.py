@@ -145,6 +145,8 @@ class Worker(object):
             return
         with self._instrument(job):
             start_time = time.time()
+            error = failed = False
+            caught_exception = None
             try:
                 if job.abstract:
                     raise ValueError(('Unsupported Job: %s, please import it ' \
@@ -157,23 +159,22 @@ class Worker(object):
                         job.after()
                     job.success()
                     job.remove()
-                    # report success
-                    if self.newrelic_app:
-                        newrelic.agent.add_custom_attribute('error', False)
-                        newrelic.agent.add_custom_attribute('job_failure', False)
             except Exception as exception:
+                error = True
+                caught_exception = exception
                 # handle error
                 error_str = traceback.format_exc()
                 failed = job.set_error_unlock(error_str)
-                # report error
-                if self.newrelic_app:
-                    newrelic.agent.add_custom_attribute('error', True)
-                    newrelic.agent.add_custom_attribute('job_failure', failed)
-                    newrelic.agent.record_exception(exception)
                 # if that was a termination error, bubble up to caller
                 if type(exception) == TerminatedException:
                     raise exception
             finally:
+                # report error status
+                if self.newrelic_app:
+                    newrelic.agent.add_custom_attribute('error', error)
+                    newrelic.agent.add_custom_attribute('job_failure', failed)
+                    if caught_exception:
+                        newrelic.agent.record_exception(caught_exception)
                 time_diff = time.time() - start_time
                 self.logger.info('Job %d finished in %d seconds' % \
                     (job.job_id, time_diff))
