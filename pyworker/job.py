@@ -110,12 +110,15 @@ class Job(object, metaclass=Meta):
         self.attempts += 1
         now = get_current_time()
         setters = [
-            'locked_at = null',
-            'locked_by = null',
-            'attempts = %d' % self.attempts,
+            'locked_at = %s',
+            'locked_by = %s',
+            'attempts = %s',
             'last_error = %s'
         ]
         values = [
+            None,
+            None,
+            self.attempts,
             error
         ]
         if self.attempts >= self.max_attempts:
@@ -129,16 +132,20 @@ class Job(object, metaclass=Meta):
             setters.append('run_at = %s')
             delta = (self.attempts**4) + 5
             values.append(str(now + get_time_delta(seconds=delta)))
-        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
-            (', '.join(setters), self.job_id)
-        self.logger.debug('set error query: %s' % query)
-        self.logger.debug('set error values: %s' % str(values))
-        self.database.cursor().execute(query, tuple(values))
-        self.database.commit()
+
+        self._update_job(setters, values)
         return failed
 
     def remove(self):
         self.logger.debug('Job %d finished successfully' % self.job_id)
         query = 'DELETE FROM delayed_jobs WHERE id = %d' % self.job_id
         self.database.cursor().execute(query)
+        self.database.commit()
+
+    def _update_job(self, setters, values):
+        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
+            (', '.join(setters), self.job_id)
+        self.logger.debug('update query: %s' % query)
+        self.logger.debug('update values: %s' % str(values))
+        self.database.cursor().execute(query, tuple(values))
         self.database.commit()
