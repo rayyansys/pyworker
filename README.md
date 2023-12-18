@@ -115,7 +115,6 @@ Youc an also provide a logger class (from `logging` module) to have full control
 - No access to your Ruby classes, you should implement all your logic from scratch in Python
 - Reads only raw attributes of jobs from the database (job table columns), no relations
 - Assumes you only need to call the `run` method in your job with no arguments
-- No unit tests
 
 ## Contribute
 
@@ -126,6 +125,11 @@ Install the code for development:
     python setup.py develop
 
 Do your changes, then send a pull request.
+
+## Test
+
+    pip install -r requirements-test.txt
+    pytest
 
 ## Publish
 
