@@ -1,0 +1,20 @@
+--- !ruby/object:Delayed::PerformableMethod
+object: !ruby/object:UnregisteredJob
+  raw_attributes:
+    id: 100
+    title: review title
+    description: |
+      review description
+      multiline
+    total_articles: 1000
+    is_blind: true
+  attributes: !ruby/object:ActiveRecord::AttributeSet
+    attributes: !ruby/object:ActiveRecord::LazyAttributeHash
+      types: {}
+      values: {}
+      additional_types: {}
+      materialized: true
+  new_record: false
+  active_record_yaml_version: 1
+method_name: :run
+args: []
