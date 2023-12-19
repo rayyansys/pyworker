@@ -145,7 +145,8 @@ class Worker(object):
         if job_row:
             return Job.from_row(job_row, max_attempts=self.max_attempts,
                 database=self.database, logger=self.logger,
-                extra_fields=self.extra_delayed_job_fields)
+                extra_fields=self.extra_delayed_job_fields,
+                reporter=self.reporter)
         else:
             return None
 
