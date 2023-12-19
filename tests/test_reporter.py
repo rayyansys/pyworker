@@ -1,0 +1,178 @@
+from unittest import TestCase
+from unittest.mock import patch, MagicMock
+from pyworker.reporter import Reporter
+
+
+class TestReporter(TestCase):
+
+    def setUp(self) -> None:
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        return super().tearDown()
+
+    #********** __init__ tests **********#
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_init_initializes_newrelic(self, newrelic_agent):
+        newrelic_app = MagicMock()
+        newrelic_agent.register_application.return_value = newrelic_app
+        reporter = Reporter(attribute_prefix='test_prefix')
+
+        self.assertEqual(reporter._prefix, 'test_prefix')
+        self.assertIsNone(reporter._logger)
+        self.assertEqual(reporter._newrelic_app, newrelic_app)
+        newrelic_agent.register_application.assert_called_once_with()
+        newrelic_agent.initialize.assert_called_once_with()
+
+    #********** .report tests **********#
+
+    @patch('pyworker.reporter.Reporter.report_generic')
+    def test_reporter_report_merges_attributes(self, mock_report_generic):
+        reporter = Reporter()
+        reporter.report(review_id=1, articles_count=2,
+                        test_attribute1=3, test_attribute2=4)
+
+        mock_report_generic.assert_called_once_with(
+            test_attribute1=3,
+            review_id=1,
+            test_attribute2=4,
+            articles_count=2
+        )
+
+    #********** .report_generic tests **********#
+
+    @patch('pyworker.reporter.Reporter._report_newrelic')
+    @patch('pyworker.reporter.Reporter._format_attributes')
+    def test_reporter_report_generic_formats_attributes_and_reports_to_newrelic(
+            self, mock_format_attributes, mock_report_newrelic):
+        reporter = Reporter()
+        mock_format_attributes.return_value = {'formatted_attribute': '1'}
+        reporter.report_generic(test_attribute=1)
+
+        mock_format_attributes.assert_called_once_with({'test_attribute': 1})
+        mock_report_newrelic.assert_called_once_with({'formatted_attribute': '1'})
+
+    #********** .recorder tests **********#
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_recorder_returns_newrelic_background_task(self, newrelic_agent):
+        reporter = Reporter()
+        newrelic_agent.BackgroundTask.return_value = ['background_task'].__iter__()
+
+        with reporter.recorder('test_name') as background_task:
+            self.assertEqual(background_task, 'background_task')
+            newrelic_agent.BackgroundTask.assert_called_once_with(
+                application=reporter._newrelic_app,
+                name='test_name',
+                group='DelayedJob'
+            )
+
+    #********** .shutdown tests **********#
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_shutdown_calls_newrelic_shutdown_agent(self, newrelic_agent):
+        reporter = Reporter()
+        reporter.shutdown()
+
+        newrelic_agent.shutdown_agent.assert_called_once_with()
+
+    #********** .record_exception tests **********#
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_record_exception_calls_newrelic_record_exception(self, newrelic_agent):
+        reporter = Reporter()
+        reporter.record_exception('test_exception')
+
+        newrelic_agent.record_exception.assert_called_once_with('test_exception')
+
+    #********** ._format_attributes tests **********#
+
+    def test_reporter_format_attributes_prefixes_and_camel_cases_keys_and_converts_values(self):
+        reporter = Reporter(attribute_prefix='prefix.')
+
+        self.assertEqual(
+            reporter._format_attributes({
+                'test_key1': 'test_value1',
+                'test_key2': 2,
+                'test_key3': 3.0,
+                'test_key4': True,
+                'test_key5': {'test_key6': [1, 'test_value6']},
+                'test_key7': None,
+                None: 'test_value8'
+            }),
+            {
+                'prefix.testKey1': 'test_value1',
+                'prefix.testKey2': 2,
+                'prefix.testKey3': 3.0,
+                'prefix.testKey4': True,
+                'prefix.testKey5': '{"test_key6": [1, "test_value6"]}'
+            }
+        )
+
+    #********** ._to_camel_case tests **********#
+
+    def test_reporter_to_camel_case_converts_to_camel_case(self):
+        reporter = Reporter()
+
+        self.assertEqual(
+            reporter._to_camel_case('test-key'),
+            'testKey'
+        )
+        self.assertEqual(
+            reporter._to_camel_case('test_key'),
+            'testKey'
+        )
+        self.assertEqual(
+            reporter._to_camel_case('test key'),
+            'testKey'
+        )
+
+    #********** ._convert_value tests **********#
+
+    def test_reporter_convert_value_converts_value_to_json_if_not_supported(self):
+        reporter = Reporter()
+
+        self.assertEqual(
+            reporter._convert_value({'test_key': 'test_value'}),
+            '{"test_key": "test_value"}'
+        )
+        self.assertEqual(
+            reporter._convert_value('test_value'),
+            'test_value'
+        )
+        self.assertEqual(
+            reporter._convert_value(1),
+            1
+        )
+        self.assertEqual(
+            reporter._convert_value(1.0),
+            1.0
+        )
+        self.assertEqual(
+            reporter._convert_value(True),
+            True
+        )
+        self.assertEqual(
+            reporter._convert_value(False),
+            False
+        )
+        self.assertEqual(
+            reporter._convert_value(None),
+            'null'
+        )
+
+    #********** ._report_newrelic tests **********#
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_calls_newrelic_record_exception(self, newrelic_agent):
+        reporter = Reporter()
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2
+        })
+
+        newrelic_agent.add_custom_attributes.assert_called_once_with([
+            ('test_key1', 'test_value'),
+            ('test_key2', 2)
+        ])
