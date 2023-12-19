@@ -20,7 +20,7 @@ class Job(object):
     __metaclass__ = Meta
     def __init__(self, class_name, database, logger,
                  job_id, queue, run_at, attempts=0, max_attempts=1,
-                 attributes=None, abstract=False):
+                 attributes=None, abstract=False, extra_fields=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -33,13 +33,14 @@ class Job(object):
         self.max_attempts = max_attempts
         self.attributes = attributes
         self.abstract = abstract
+        self.extra_fields = extra_fields
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
 
     @classmethod
-    def from_row(cls, job_row, max_attempts, database, logger):
-        '''job_row is a tuple of (id, attempts, run_at, queue, handler)'''
+    def from_row(cls, job_row, max_attempts, database, logger, extra_fields=None):
+        '''job_row is a tuple of (id, attempts, run_at, queue, handler, *extra_fields)'''
         def extract_class_name(line):
             regex = re.compile('object: !ruby/object:(.+)')
             match = regex.match(line)
@@ -61,7 +62,14 @@ class Job(object):
                     attributes.append(line)
             return attributes
 
-        job_id, attempts, run_at, queue, handler = job_row
+        def extract_extra_fields(extra_fields, extra_field_values):
+            if extra_fields is None or extra_field_values is None:
+                return None
+
+            return dict(zip(extra_fields, extra_field_values))
+
+        job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
+        extra_fields_dict = extract_extra_fields(extra_fields, extra_field_values)
         handler = handler.splitlines()
 
         class_name = extract_class_name(handler[1])
@@ -73,7 +81,7 @@ class Job(object):
                 max_attempts=max_attempts,
                 job_id=job_id, attempts=attempts,
                 run_at=run_at, queue=queue, database=database,
-                abstract=True)
+                abstract=True, extra_fields=extra_fields_dict)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -86,7 +94,8 @@ class Job(object):
             job_id=job_id, attempts=attempts,
             run_at=run_at, queue=queue, database=database,
             max_attempts=max_attempts,
-            attributes=payload['object']['attributes'])
+            attributes=payload['object']['attributes'],
+            abstract=False, extra_fields=extra_fields_dict)
 
     def before(self):
         self.logger.debug("Running Job.before hook")

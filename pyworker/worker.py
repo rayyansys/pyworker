@@ -2,6 +2,7 @@ import newrelic.agent
 
 import os, signal, traceback
 import time
+import json
 from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
@@ -12,7 +13,7 @@ class TimeoutException(Exception): pass
 class TerminatedException(Exception): pass
 
 class Worker(object):
-    def __init__(self, dbstring, logger=None):
+    def __init__(self, dbstring, logger=None, extra_delayed_job_fields=None):
         super(Worker, self).__init__()
         self.logger = Logger(logger)
         self.logger.info('Starting pyworker...')
@@ -24,6 +25,7 @@ class Worker(object):
         hostname = os.uname()[1]
         pid = os.getpid()
         self.name = 'host:%s pid:%d' % (hostname, pid)
+        self.extra_delayed_job_fields = extra_delayed_job_fields
 
         # Configure NewRelic if ENV variables set
         self.newrelic_app = None
@@ -84,7 +86,16 @@ class Worker(object):
                 newrelic.agent.add_custom_attribute('job_queue', job.queue)
                 newrelic.agent.add_custom_attribute('job_latency', latency)
                 newrelic.agent.add_custom_attribute('job_attempts', job.attempts)
-                # TODO report job.enqueue_attributes if available
+
+                # Record extra fields if configured
+                self.logger.debug('job extra fields: %s' % job.extra_fields)
+                if job.extra_fields is not None:
+                    for key, value in job.extra_fields.items():
+                        # NewRelic only supports string, int, float, bool
+                        if value is not None:
+                            if type(value) not in [str, int, float, bool]:
+                                value = json.dumps(value)
+                            newrelic.agent.add_custom_attribute(key, value)
 
                 yield task
         else:
@@ -119,6 +130,10 @@ class Worker(object):
             now, expired = str(now), str(expired)
             queues = self.queue_names.split(',')
             queues = ', '.join(["'%s'" % q for q in queues])
+            fields = ['id', 'attempts', 'run_at', 'queue', 'handler']
+            if self.extra_delayed_job_fields:
+                fields += self.extra_delayed_job_fields
+            fields = ', '.join(fields)
             query = '''
             UPDATE delayed_jobs SET locked_at = '%s', locked_by = '%s'
             WHERE id IN (SELECT delayed_jobs.id FROM delayed_jobs
@@ -127,8 +142,8 @@ class Worker(object):
                 OR locked_by = '%s') AND failed_at IS NULL)
                 AND delayed_jobs.queue IN (%s)
             ORDER BY priority ASC, run_at ASC LIMIT 1 FOR UPDATE) RETURNING
-                id, attempts, run_at, queue, handler
-            ''' % (now, self.name, now, expired, self.name, queues)
+                %s
+            ''' % (now, self.name, now, expired, self.name, queues, fields)
             self.logger.debug('query: %s' % query)
             self._cursor.execute(query)
             return self._cursor.fetchone()
@@ -136,7 +151,8 @@ class Worker(object):
         job_row = get_job_row()
         if job_row:
             return Job.from_row(job_row, max_attempts=self.max_attempts,
-                database=self.database, logger=self.logger)
+                database=self.database, logger=self.logger,
+                extra_fields=self.extra_delayed_job_fields)
         else:
             return None
 

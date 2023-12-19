@@ -1,4 +1,5 @@
 import datetime
+import json
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
 from pyworker.worker import Worker, TerminatedException, get_current_time
@@ -20,6 +21,15 @@ class TestWorker(TestCase):
             queue='default',
             attempts=0,
             run_at=mocked_run_at)
+        self.mock_extra_fields = {
+            'extra_field1_str': 'extra_field1_value',
+            'extra_field2_int': 100,
+            'extra_field3_float': 1.1,
+            'extra_field4_bool': True,
+            'extra_field5_bool': False,
+            'extra_field6_json': {'a': [1, 2, 3]},
+            'extra_field7_none': None
+        }
 
     def tearDown(self):
         pass
@@ -38,6 +48,13 @@ class TestWorker(TestCase):
         self.assertEqual(worker.max_run_time, 3600)
         self.assertEqual(worker.queue_names, 'default')
         self.assertEqual(worker.name, 'host:localhost pid:1234')
+        self.assertIsNone(worker.extra_delayed_job_fields)
+
+    @patch('pyworker.worker.DBConnector')
+    def test_worker_init_with_extra_delayed_job_fields(self, *_):
+        worker = Worker('dummy', extra_delayed_job_fields=self.mock_extra_fields.keys())
+
+        self.assertEqual(worker.extra_delayed_job_fields, self.mock_extra_fields.keys())
 
     #********** .run tests **********#
 
@@ -85,12 +102,18 @@ class TestWorker(TestCase):
         newrelic_agent.add_custom_attribute.assert_any_call('job_queue', job.queue)
         newrelic_agent.add_custom_attribute.assert_any_call('job_latency', self.mocked_latency)
         newrelic_agent.add_custom_attribute.assert_any_call('job_attempts', job.attempts)
+        if job.extra_fields is not None:
+            for key, value in job.extra_fields.items():
+                if value is not None:
+                    if key.endswith('_json'):
+                        value = json.dumps(value)
+                    newrelic_agent.add_custom_attribute.assert_any_call(key, value)
 
     def test_worker_handle_job_when_job_is_none_does_nothing(self):
         self.worker.handle_job(None) # no error raised
 
     @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_job_is_unsupported_type_sets_error(self, newrelic_agent):
+    def test_worker_handle_job_when_job_is_unsupported_type_sets_error(self, *_):
         job = self.mock_job
         job.abstract = True
 
@@ -114,6 +137,20 @@ class TestWorker(TestCase):
         newrelic_agent.record_exception.assert_called_once()
         newrelic_agent.add_custom_attribute.assert_any_call('error', True)
 
+    @patch('pyworker.worker.get_current_time')
+    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
+    def test_worker_handle_job_when_job_is_unsupported_type_reports_extra_fields_to_newrelic(
+            self, newrelic_agent, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.abstract = True
+        job.extra_fields = self.mock_extra_fields
+        self.worker.newrelic_app = MagicMock()
+
+        self.worker.handle_job(job)
+
+        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
+
     def test_worker_handle_job_calls_all_hooks_then_removes_from_queue(self):
         self.worker.handle_job(self.mock_job)
 
@@ -129,11 +166,13 @@ class TestWorker(TestCase):
     def test_worker_handle_job_when_no_errors_reports_success_to_newrelic(
             self, newrelic_agent, get_current_time):
         get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.extra_fields = self.mock_extra_fields
         self.worker.newrelic_app = MagicMock()
 
-        self.worker.handle_job(self.mock_job)
+        self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(self.mock_job, newrelic_agent)
+        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
         newrelic_agent.record_exception.assert_not_called()
         newrelic_agent.add_custom_attribute.assert_any_call('error', False)
         newrelic_agent.add_custom_attribute.assert_any_call('job_failure', False)
@@ -156,6 +195,7 @@ class TestWorker(TestCase):
         job = self.mock_job
         job.set_error_unlock.return_value = False
         job.run.side_effect = Exception('test error')
+        job.extra_fields = self.mock_extra_fields
         self.worker.newrelic_app = MagicMock()
 
         self.worker.handle_job(job)
@@ -174,6 +214,7 @@ class TestWorker(TestCase):
         job = self.mock_job
         job.set_error_unlock.return_value = True
         job.run.side_effect = Exception('test error')
+        job.extra_fields = self.mock_extra_fields
         self.worker.newrelic_app = MagicMock()
 
         self.worker.handle_job(job)
