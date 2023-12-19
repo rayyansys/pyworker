@@ -2,7 +2,7 @@ import datetime
 import json
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
-from pyworker.worker import Worker, TerminatedException, get_current_time
+from pyworker.worker import Worker, TerminatedException
 
 class TestWorker(TestCase):
     @patch('pyworker.worker.DBConnector')
@@ -49,12 +49,25 @@ class TestWorker(TestCase):
         self.assertEqual(worker.queue_names, 'default')
         self.assertEqual(worker.name, 'host:localhost pid:1234')
         self.assertIsNone(worker.extra_delayed_job_fields)
+        self.assertIsNone(worker.reporter)
 
     @patch('pyworker.worker.DBConnector')
     def test_worker_init_with_extra_delayed_job_fields(self, *_):
         worker = Worker('dummy', extra_delayed_job_fields=self.mock_extra_fields.keys())
 
         self.assertEqual(worker.extra_delayed_job_fields, self.mock_extra_fields.keys())
+
+    @patch('pyworker.worker.DBConnector')
+    @patch('pyworker.worker.os.environ', {
+        'NEW_RELIC_LICENSE_KEY': 'test', 'NEW_RELIC_APP_NAME': 'test'})
+    @patch('pyworker.worker.Reporter')
+    def test_worker_init_with_reporter(self, mock_reporter, *_):
+        mock_reporter.return_value = MagicMock()
+        worker = Worker('dummy', reported_attributes_prefix='test_prefix')
+
+        self.assertEqual(worker.reporter, mock_reporter.return_value)
+        mock_reporter.assert_called_once_with(
+            attribute_prefix='test_prefix', logger=worker.logger)
 
     #********** .run tests **********#
 
@@ -69,13 +82,12 @@ class TestWorker(TestCase):
 
     @patch('pyworker.worker.Worker.get_job', return_value=None)
     @patch('pyworker.worker.time.sleep', side_effect=TerminatedException('SIGTERM'))
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_run_shuts_down_newrelic_agent(self, newrelic_agent, *_):
-        self.worker.newrelic_app = MagicMock()
+    def test_worker_run_shuts_down_reporter(self, *_):
+        self.worker.reporter = MagicMock()
 
         self.worker.run()
 
-        newrelic_agent.shutdown_agent.assert_called_once_with()
+        self.worker.reporter.shutdown.assert_called_once_with()
 
     @patch('pyworker.worker.time.sleep', side_effect=TerminatedException('SIGTERM'))
     @patch('pyworker.worker.Worker.get_job', return_value=None)
@@ -95,25 +107,22 @@ class TestWorker(TestCase):
 
     #********** .handle_job tests **********#
 
-    def assert_instrument_context_reports_custom_attributes(self, job, newrelic_agent):
-        newrelic_agent.BackgroundTask.assert_called_once()
-        newrelic_agent.add_custom_attribute.assert_any_call('job_id', job.job_id)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_name', job.job_name)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_queue', job.queue)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_latency', self.mocked_latency)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_attempts', job.attempts)
+    def assert_instrument_context_reports_custom_attributes(self, job, reporter):
+        reporter.recorder.assert_called_once()
+        reporter.report_generic.assert_any_call(
+            job_id=job.job_id,
+            job_name=job.job_name,
+            job_queue=job.queue,
+            job_latency=self.mocked_latency,
+            job_attempts=job.attempts
+        )
         if job.extra_fields is not None:
-            for key, value in job.extra_fields.items():
-                if value is not None:
-                    if key.endswith('_json'):
-                        value = json.dumps(value)
-                    newrelic_agent.add_custom_attribute.assert_any_call(key, value)
+            reporter.report_generic.assert_any_call(**job.extra_fields)
 
     def test_worker_handle_job_when_job_is_none_does_nothing(self):
         self.worker.handle_job(None) # no error raised
 
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_job_is_unsupported_type_sets_error(self, *_):
+    def test_worker_handle_job_when_job_is_unsupported_type_sets_error(self):
         job = self.mock_job
         job.abstract = True
 
@@ -123,33 +132,34 @@ class TestWorker(TestCase):
         assert 'Unsupported Job' in job.set_error_unlock.call_args[0][0]
 
     @patch('pyworker.worker.get_current_time')
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_job_is_unsupported_type_reports_error_to_newrelic(
-            self, newrelic_agent, get_current_time):
+    def test_worker_handle_job_when_job_is_unsupported_type_reports_error(
+            self, get_current_time):
         get_current_time.return_value = self.mocked_now
         job = self.mock_job
         job.abstract = True
-        self.worker.newrelic_app = MagicMock()
+        job.set_error_unlock.return_value = False
+        reporter = MagicMock()
+        self.worker.reporter = reporter
 
         self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
-        newrelic_agent.record_exception.assert_called_once()
-        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
+        self.assert_instrument_context_reports_custom_attributes(job, reporter)
+        reporter.record_exception.assert_called_once()
+        reporter.report_generic.assert_any_call(error=True, job_failure=False)
 
     @patch('pyworker.worker.get_current_time')
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_job_is_unsupported_type_reports_extra_fields_to_newrelic(
-            self, newrelic_agent, get_current_time):
+    def test_worker_handle_job_when_job_is_unsupported_type_reports_extra_fields(
+            self, get_current_time):
         get_current_time.return_value = self.mocked_now
         job = self.mock_job
         job.abstract = True
         job.extra_fields = self.mock_extra_fields
-        self.worker.newrelic_app = MagicMock()
+        reporter = MagicMock()
+        self.worker.reporter = reporter
 
         self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
+        self.assert_instrument_context_reports_custom_attributes(job, reporter)
 
     def test_worker_handle_job_calls_all_hooks_then_removes_from_queue(self):
         self.worker.handle_job(self.mock_job)
@@ -162,20 +172,19 @@ class TestWorker(TestCase):
         self.mock_job.remove.assert_called_once()
 
     @patch('pyworker.worker.get_current_time')
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_no_errors_reports_success_to_newrelic(
-            self, newrelic_agent, get_current_time):
+    def test_worker_handle_job_when_no_errors_reports_success(
+            self, get_current_time):
         get_current_time.return_value = self.mocked_now
         job = self.mock_job
         job.extra_fields = self.mock_extra_fields
-        self.worker.newrelic_app = MagicMock()
+        reporter = MagicMock()
+        self.worker.reporter = reporter
 
         self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
-        newrelic_agent.record_exception.assert_not_called()
-        newrelic_agent.add_custom_attribute.assert_any_call('error', False)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', False)
+        reporter.record_exception.assert_not_called()
+        reporter.report_generic.assert_any_call(error=False, job_failure=False)
+        self.assert_instrument_context_reports_custom_attributes(job, reporter)
 
     def test_worker_handle_job_when_error_sets_error_and_unlocks_job(self):
         job = self.mock_job
@@ -188,41 +197,39 @@ class TestWorker(TestCase):
         job.remove.assert_not_called()
 
     @patch('pyworker.worker.get_current_time')
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_error_report_to_newrelic(self,
-            newrelic_agent, get_current_time):
+    def test_worker_handle_job_when_error_reports_error(self,
+            get_current_time):
         get_current_time.return_value = self.mocked_now
         job = self.mock_job
         job.set_error_unlock.return_value = False
         job.run.side_effect = Exception('test error')
         job.extra_fields = self.mock_extra_fields
-        self.worker.newrelic_app = MagicMock()
+        reporter = MagicMock()
+        self.worker.reporter = reporter
 
         self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
-        newrelic_agent.record_exception.assert_called_once()
-        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', False)
+        self.assert_instrument_context_reports_custom_attributes(job, reporter)
+        reporter.record_exception.assert_called_once()
+        reporter.report_generic.assert_any_call(error=True, job_failure=False)
         job.remove.assert_not_called()
 
     @patch('pyworker.worker.get_current_time')
-    @patch('pyworker.worker.newrelic.agent', return_value=MagicMock())
-    def test_worker_handle_job_when_permanent_error_reports_failure_to_newrelic(
-            self, newrelic_agent, get_current_time):
+    def test_worker_handle_job_when_permanent_error_reports_failure(
+            self, get_current_time):
         get_current_time.return_value = self.mocked_now
         job = self.mock_job
         job.set_error_unlock.return_value = True
         job.run.side_effect = Exception('test error')
         job.extra_fields = self.mock_extra_fields
-        self.worker.newrelic_app = MagicMock()
+        reporter = MagicMock()
+        self.worker.reporter = reporter
 
         self.worker.handle_job(job)
 
-        self.assert_instrument_context_reports_custom_attributes(job, newrelic_agent)
-        newrelic_agent.record_exception.assert_called_once()
-        newrelic_agent.add_custom_attribute.assert_any_call('error', True)
-        newrelic_agent.add_custom_attribute.assert_any_call('job_failure', True)
+        self.assert_instrument_context_reports_custom_attributes(job, reporter)
+        reporter.record_exception.assert_called_once()
+        reporter.report_generic.assert_any_call(error=True, job_failure=True)
         job.remove.assert_not_called()
 
     def test_worker_handle_job_when_error_is_termination_error_bubbles_up(self):
