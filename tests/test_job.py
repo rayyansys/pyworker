@@ -17,6 +17,13 @@ class TestJob(TestCase):
         self.mock_queue = 'default'
         self.mock_max_attempts = 5
         self.mock_now = datetime.datetime(2023, 10, 7, 0, 0, 0)
+        self.mock_extra_fields = {
+            'extra_field1': 'extra_field1_value',
+            'extra_field2': 100,
+            'extra_field3': True,
+            'extra_field4': {'a': [1, 2, 3]},
+            'extra_field5': None
+        }
 
     def tearDown(self):
         pass
@@ -38,8 +45,26 @@ class TestJob(TestCase):
                             self.mock_max_attempts,
                             MagicMock(), MagicMock())
 
+    def load_job_with_extra_fields(self, filename):
+        mock_handler = self.load_fixture(filename)
+        mock_row = (
+            self.mock_job_id,
+            self.mock_attempts,
+            self.mock_run_at,
+            self.mock_queue,
+            mock_handler,
+            *self.mock_extra_fields.values()
+        )
+        return Job.from_row(mock_row,
+                            self.mock_max_attempts,
+                            MagicMock(), MagicMock(),
+                            extra_fields=self.mock_extra_fields.keys())
+
     def load_unregistered_job(self):
         return self.load_job('handler_unregistered.yaml')
+
+    def load_unregistered_job_with_extra_fields(self):
+        return self.load_job_with_extra_fields('handler_unregistered.yaml')
 
     def load_registered_job(self):
         job = self.load_job('handler_registered.yaml')
@@ -47,6 +72,9 @@ class TestJob(TestCase):
         job.failure = MagicMock()
         job._update_job = MagicMock()
         return job
+
+    def load_registered_job_with_extra_fields(self):
+        return self.load_job_with_extra_fields('handler_registered.yaml')
 
     def load_registered_job_with_attempts_exceeded(self):
         job = self.load_registered_job()
@@ -61,13 +89,29 @@ class TestJob(TestCase):
         self.assertEqual(job.class_name, 'UnregisteredJob')
         self.assertEqual(job.abstract, True)
 
+    def test_from_row_when_unregistered_class_returns_job_instance_without_attributes(self):
+        job = self.load_unregistered_job()
+
+        self.assertEqual(job.job_id, self.mock_job_id)
+        self.assertEqual(job.attempts, self.mock_attempts)
+        self.assertEqual(job.run_at, self.mock_run_at)
+        self.assertEqual(job.queue, self.mock_queue)
+        self.assertEqual(job.max_attempts, self.mock_max_attempts)
+        self.assertIsNone(job.extra_fields)
+        self.assertIsNone(job.attributes)
+
+    def test_from_row_when_unregistered_class_returns_job_instance_with_extra_fields(self):
+        job = self.load_unregistered_job_with_extra_fields()
+
+        self.assertDictEqual(job.extra_fields, self.mock_extra_fields)
+
     def test_from_row_when_registered_class_returns_concrete_job_instance(self):
         job = self.load_registered_job()
 
         self.assertEqual(job.class_name, 'RegisteredJob')
         self.assertEqual(job.abstract, False)
 
-    def test_from_row_when_registered_class_returns_concrete_job_instance_with_attributes(self):
+    def test_from_row_when_registered_class_returns_job_instance_with_attributes(self):
         job = self.load_registered_job()
 
         self.assertEqual(job.job_id, self.mock_job_id)
@@ -75,6 +119,7 @@ class TestJob(TestCase):
         self.assertEqual(job.run_at, self.mock_run_at)
         self.assertEqual(job.queue, self.mock_queue)
         self.assertEqual(job.max_attempts, self.mock_max_attempts)
+        self.assertIsNone(job.extra_fields)
         # below attributes match the registered class fixture
         self.assertDictEqual(job.attributes, {
             'id': 100,
@@ -83,6 +128,11 @@ class TestJob(TestCase):
             'total_articles': 1000,
             'is_blind': True
         })
+
+    def test_from_row_when_registered_class_returns_job_instance_with_extra_fields(self):
+        job = self.load_registered_job_with_extra_fields()
+
+        self.assertDictEqual(job.extra_fields, self.mock_extra_fields)
 
     #********** .set_error_unlock tests **********#
 
