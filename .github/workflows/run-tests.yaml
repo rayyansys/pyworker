@@ -2,20 +2,16 @@ name: Run tests
 
 on:
   push:
-    branches: [ master ]
+    branches: [ python2.7 ]
   pull_request:
-    branches: [ master ]
+    branches: [ python2.7 ]
 
 jobs:
   test:
     strategy:
       matrix:
         python-version:
-          - "3.8"
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
+          - "2.7"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
