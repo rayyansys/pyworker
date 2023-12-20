@@ -77,7 +77,7 @@ class Worker(object):
             with self.reporter.recorder(job.job_name) as task:
 
                 # Record custom attributes for the job transaction
-                self.reporter.report_generic(
+                self.reporter.report(
                     job_id=job.job_id,
                     job_name=job.job_name,
                     job_queue=job.queue,
@@ -88,7 +88,7 @@ class Worker(object):
                 # Record extra fields if configured
                 self.logger.debug('job extra fields: %s' % job.extra_fields)
                 if job.extra_fields is not None:
-                    self.reporter.report_generic(**job.extra_fields)
+                    self.reporter.report(**job.extra_fields)
 
                 yield task
         else:
@@ -181,7 +181,7 @@ class Worker(object):
             finally:
                 # report error status
                 if self.reporter:
-                    self.reporter.report_generic(error=error, job_failure=failed)
+                    self.reporter.report(error=error, job_failure=failed)
                     if caught_exception:
                         self.reporter.record_exception(caught_exception)
                 time_diff = time.time() - start_time

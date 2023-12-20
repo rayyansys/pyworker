@@ -13,15 +13,7 @@ class Reporter(object):
         newrelic.agent.initialize()
         self._newrelic_app = newrelic.agent.register_application()
 
-    def report(self, review_id, articles_count, **attributes):
-        # extend attributes with review_id and articles_count
-        attributes.update({
-            'review_id': review_id,
-            'articles_count': articles_count
-        })
-        self.report_generic(**attributes)
-
-    def report_generic(self, **attributes):
+    def report(self, **attributes):
         # format attributes
         attributes = self._format_attributes(attributes)
         # report to NewRelic

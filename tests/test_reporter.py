@@ -27,28 +27,13 @@ class TestReporter(TestCase):
 
     #********** .report tests **********#
 
-    @patch('pyworker.reporter.Reporter.report_generic')
-    def test_reporter_report_merges_attributes(self, mock_report_generic):
-        reporter = Reporter()
-        reporter.report(review_id=1, articles_count=2,
-                        test_attribute1=3, test_attribute2=4)
-
-        mock_report_generic.assert_called_once_with(
-            test_attribute1=3,
-            review_id=1,
-            test_attribute2=4,
-            articles_count=2
-        )
-
-    #********** .report_generic tests **********#
-
     @patch('pyworker.reporter.Reporter._report_newrelic')
     @patch('pyworker.reporter.Reporter._format_attributes')
-    def test_reporter_report_generic_formats_attributes_and_reports_to_newrelic(
+    def test_reporter_report_formats_attributes_and_reports_to_newrelic(
             self, mock_format_attributes, mock_report_newrelic):
         reporter = Reporter()
         mock_format_attributes.return_value = {'formatted_attribute': '1'}
-        reporter.report_generic(test_attribute=1)
+        reporter.report(test_attribute=1)
 
         mock_format_attributes.assert_called_once_with({'test_attribute': 1})
         mock_report_newrelic.assert_called_once_with({'formatted_attribute': '1'})
