@@ -1,3 +1,4 @@
+import sys
 import os, signal, traceback
 import time
 from contextlib import contextmanager
@@ -156,7 +157,7 @@ class Worker(object):
         with self._instrument(job):
             start_time = time.time()
             error = failed = False
-            caught_exception = None
+            caught_exc_info = None
             try:
                 if job.abstract:
                     raise ValueError(('Unsupported Job: %s, please import it ' \
@@ -171,7 +172,7 @@ class Worker(object):
                     job.remove()
             except Exception as exception:
                 error = True
-                caught_exception = exception
+                caught_exc_info = sys.exc_info() # tuple of type, value, traceback
                 # handle error
                 error_str = traceback.format_exc()
                 failed = job.set_error_unlock(error_str)
@@ -183,8 +184,8 @@ class Worker(object):
                 if self.reporter:
                     self.reporter.report_raw(error=error)
                     self.reporter.report(job_failure=failed)
-                    if caught_exception:
-                        self.reporter.record_exception(caught_exception)
+                    if caught_exc_info:
+                        self.reporter.record_exception(caught_exc_info)
                 time_diff = time.time() - start_time
                 self.logger.info('Job %d finished in %d seconds' % \
                     (job.job_id, time_diff))
