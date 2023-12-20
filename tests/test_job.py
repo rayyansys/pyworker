@@ -66,6 +66,11 @@ class TestJob(TestCase):
     def load_unregistered_job_with_extra_fields(self):
         return self.load_job_with_extra_fields('handler_unregistered.yaml')
 
+    def load_unregistered_job_with_reporter(self, reporter):
+        job = self.load_unregistered_job()
+        job.reporter = reporter
+        return job
+
     def load_registered_job(self):
         job = self.load_job('handler_registered.yaml')
         job.error = MagicMock()
@@ -75,6 +80,11 @@ class TestJob(TestCase):
 
     def load_registered_job_with_extra_fields(self):
         return self.load_job_with_extra_fields('handler_registered.yaml')
+
+    def load_registered_job_with_reporter(self, reporter):
+        job = self.load_registered_job()
+        job.reporter = reporter
+        return job
 
     def load_registered_job_with_attempts_exceeded(self):
         job = self.load_registered_job()
@@ -99,11 +109,18 @@ class TestJob(TestCase):
         self.assertEqual(job.max_attempts, self.mock_max_attempts)
         self.assertIsNone(job.extra_fields)
         self.assertIsNone(job.attributes)
+        self.assertIsNone(job.reporter)
 
     def test_from_row_when_unregistered_class_returns_job_instance_with_extra_fields(self):
         job = self.load_unregistered_job_with_extra_fields()
 
         self.assertDictEqual(job.extra_fields, self.mock_extra_fields)
+
+    def test_from_row_when_unregistered_class_returns_abstract_job_instance_with_reporter(self):
+        mock_reporter = MagicMock()
+        job = self.load_unregistered_job_with_reporter(mock_reporter)
+
+        self.assertEqual(job.reporter, mock_reporter)
 
     def test_from_row_when_registered_class_returns_concrete_job_instance(self):
         job = self.load_registered_job()
@@ -128,11 +145,18 @@ class TestJob(TestCase):
             'total_articles': 1000,
             'is_blind': True
         })
+        self.assertIsNone(job.reporter)
 
     def test_from_row_when_registered_class_returns_job_instance_with_extra_fields(self):
         job = self.load_registered_job_with_extra_fields()
 
         self.assertDictEqual(job.extra_fields, self.mock_extra_fields)
+
+    def test_from_row_when_registered_class_returns_concrete_job_instance_with_reporter(self):
+        mock_reporter = MagicMock()
+        job = self.load_registered_job_with_reporter(mock_reporter)
+
+        self.assertEqual(job.reporter, mock_reporter)
 
     #********** .set_error_unlock tests **********#
 

@@ -1,19 +1,19 @@
-import newrelic.agent
-
 import os, signal, traceback
 import time
-import json
 from contextlib import contextmanager
 from pyworker.db import DBConnector
 from pyworker.job import Job
 from pyworker.logger import Logger
 from pyworker.util import get_current_time, get_time_delta
+from pyworker.reporter import Reporter
 
 class TimeoutException(Exception): pass
 class TerminatedException(Exception): pass
 
 class Worker(object):
-    def __init__(self, dbstring, logger=None, extra_delayed_job_fields=None):
+    def __init__(self, dbstring, logger=None,
+                 extra_delayed_job_fields=None,
+                 reported_attributes_prefix=''):
         super(Worker, self).__init__()
         self.logger = Logger(logger)
         self.logger.info('Starting pyworker...')
@@ -27,16 +27,15 @@ class Worker(object):
         self.name = 'host:%s pid:%d' % (hostname, pid)
         self.extra_delayed_job_fields = extra_delayed_job_fields
 
-        # Configure NewRelic if ENV variables set
-        self.newrelic_app = None
+        # Configure application reporter if ENV variables set
+        self.reporter = None
         NEW_RELIC_LICENSE_KEY = os.environ.get("NEW_RELIC_LICENSE_KEY")
         NEW_RELIC_APP_NAME = os.environ.get("NEW_RELIC_APP_NAME")
 
-        # Register Application in NewRelic if configured
+        # Register application reporter if configured
         if NEW_RELIC_LICENSE_KEY and NEW_RELIC_APP_NAME:
-            self.logger.info('Initializing NewRelic Agent for: %s' % NEW_RELIC_APP_NAME)
-            newrelic.agent.initialize()
-            self.newrelic_app = newrelic.agent.register_application()
+            self.reporter = Reporter(
+                attribute_prefix=reported_attributes_prefix, logger=self.logger)
 
     @contextmanager
     def _time_limit(self, seconds):
@@ -72,30 +71,24 @@ class Worker(object):
             # and when the job actually started running `now`
             return (now - job_run_at).total_seconds()
 
-        if self.newrelic_app:
+        if self.reporter:
             latency = _latency(job.run_at)
 
-            with newrelic.agent.BackgroundTask(
-                    application=self.newrelic_app,
-                    name=job.job_name,
-                    group='DelayedJob') as task:
+            with self.reporter.recorder(job.job_name) as task:
 
                 # Record custom attributes for the job transaction
-                newrelic.agent.add_custom_attribute('job_id', job.job_id)
-                newrelic.agent.add_custom_attribute('job_name', job.job_name)
-                newrelic.agent.add_custom_attribute('job_queue', job.queue)
-                newrelic.agent.add_custom_attribute('job_latency', latency)
-                newrelic.agent.add_custom_attribute('job_attempts', job.attempts)
+                self.reporter.report(
+                    job_id=job.job_id,
+                    job_name=job.job_name,
+                    job_queue=job.queue,
+                    job_latency=latency,
+                    job_attempts=job.attempts
+                )
 
                 # Record extra fields if configured
                 self.logger.debug('job extra fields: %s' % job.extra_fields)
                 if job.extra_fields is not None:
-                    for key, value in job.extra_fields.items():
-                        # NewRelic only supports string, int, float, bool
-                        if value is not None:
-                            if type(value) not in [str, int, float, bool]:
-                                value = json.dumps(value)
-                            newrelic.agent.add_custom_attribute(key, value)
+                    self.reporter.report(**job.extra_fields)
 
                 yield task
         else:
@@ -119,9 +112,9 @@ class Worker(object):
 
             self.database.disconnect()
 
-            # If configured shutdown NewRelic Agent to upload data on shutdown
-            if self.newrelic_app:
-                newrelic.agent.shutdown_agent()
+            # If configured shutdown reporter to upload data on shutdown
+            if self.reporter:
+                self.reporter.shutdown()
 
     def get_job(self):
         def get_job_row():
@@ -152,7 +145,8 @@ class Worker(object):
         if job_row:
             return Job.from_row(job_row, max_attempts=self.max_attempts,
                 database=self.database, logger=self.logger,
-                extra_fields=self.extra_delayed_job_fields)
+                extra_fields=self.extra_delayed_job_fields,
+                reporter=self.reporter)
         else:
             return None
 
@@ -186,11 +180,10 @@ class Worker(object):
                     raise exception
             finally:
                 # report error status
-                if self.newrelic_app:
-                    newrelic.agent.add_custom_attribute('error', error)
-                    newrelic.agent.add_custom_attribute('job_failure', failed)
+                if self.reporter:
+                    self.reporter.report(error=error, job_failure=failed)
                     if caught_exception:
-                        newrelic.agent.record_exception(caught_exception)
+                        self.reporter.record_exception(caught_exception)
                 time_diff = time.time() - start_time
                 self.logger.info('Job %d finished in %d seconds' % \
                     (job.job_id, time_diff))
