@@ -29,13 +29,16 @@ class TestReporter(TestCase):
 
     @patch('pyworker.reporter.Reporter._report_newrelic')
     @patch('pyworker.reporter.Reporter._format_attributes')
-    def test_reporter_report_formats_attributes_and_reports_to_newrelic(
-            self, mock_format_attributes, mock_report_newrelic):
+    @patch('pyworker.reporter.Reporter._flatten_attributes')
+    def test_reporter_report_formats_attributes_and_reports_to_newrelic(self,
+            mock_flatten_attributes, mock_format_attributes, mock_report_newrelic):
         reporter = Reporter()
+        mock_flatten_attributes.return_value = {'flattened_attribute': '1'}
         mock_format_attributes.return_value = {'formatted_attribute': '1'}
-        reporter.report(test_attribute=1)
+        reporter.report(test_attribute={'nested_attribute': 1})
 
-        mock_format_attributes.assert_called_once_with({'test_attribute': 1})
+        mock_flatten_attributes.assert_called_once_with({'test_attribute': {'nested_attribute': 1}})
+        mock_format_attributes.assert_called_once_with({'flattened_attribute': '1'})
         mock_report_newrelic.assert_called_once_with({'formatted_attribute': '1'})
 
     #********** .report_raw tests **********#
@@ -79,6 +82,32 @@ class TestReporter(TestCase):
 
         newrelic_agent.notice_error.assert_called_once_with(error=mock_exc_info)
 
+    #********** ._flatten_attributes tests **********#
+
+    def test_reporter_flatten_attributes_flattens_nested_dict_attributes(self):
+        reporter = Reporter()
+
+        self.assertEqual(
+            reporter._flatten_attributes({
+                'test_key1': 'test_value1',
+                'test_key2': 2,
+                'test_key3': 3.0,
+                'test_key4': True,
+                'test_key5': {'test_key6': [1, 'test_value6']},
+                'test_key7': None,
+                None: 'test_value8'
+            }),
+            {
+                'test_key1': 'test_value1',
+                'test_key2': 2,
+                'test_key3': 3.0,
+                'test_key4': True,
+                'test_key6': [1, 'test_value6'],
+                'test_key7': None,
+                None: 'test_value8'
+            }
+        )
+
     #********** ._format_attributes tests **********#
 
     def test_reporter_format_attributes_prefixes_and_camel_cases_keys_and_converts_values(self):
@@ -90,7 +119,7 @@ class TestReporter(TestCase):
                 'test_key2': 2,
                 'test_key3': 3.0,
                 'test_key4': True,
-                'test_key5': {'test_key6': [1, 'test_value6']},
+                'test_key5': [1, 'test_value6'],
                 'test_key7': None,
                 None: 'test_value8'
             }),
@@ -99,7 +128,7 @@ class TestReporter(TestCase):
                 'prefix.testKey2': 2,
                 'prefix.testKey3': 3.0,
                 'prefix.testKey4': True,
-                'prefix.testKey5': '{"test_key6": [1, "test_value6"]}'
+                'prefix.testKey5': '[1, "test_value6"]'
             }
         )
 
