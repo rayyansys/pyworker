@@ -8,21 +8,12 @@ on:
 
 jobs:
   test:
-    strategy:
-      matrix:
-        python-version:
-          - "2.7"
-    runs-on: ubuntu-latest
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    runs-on:
+      container:
+        image: python:2.7.18-buster
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v1.0.0
-        with:
-          version: ${{ matrix.python-version }}
-          architecture: x64
       - name: Install dependencies
         run: pip install -r requirements-test.txt
       - name: Run tests
