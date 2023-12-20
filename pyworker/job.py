@@ -19,7 +19,8 @@ class Job(object, metaclass=Meta):
     """docstring for Job"""
     def __init__(self, class_name, database, logger,
                  job_id, queue, run_at, attempts=0, max_attempts=1,
-                 attributes=None, abstract=False, extra_fields=None):
+                 attributes=None, abstract=False, extra_fields=None,
+                 reporter=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -33,12 +34,14 @@ class Job(object, metaclass=Meta):
         self.attributes = attributes
         self.abstract = abstract
         self.extra_fields = extra_fields
+        self.reporter = reporter
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
 
     @classmethod
-    def from_row(cls, job_row, max_attempts, database, logger, extra_fields=None):
+    def from_row(cls, job_row, max_attempts, database, logger,
+                 extra_fields=None, reporter=None):
         '''job_row is a tuple of (id, attempts, run_at, queue, handler, *extra_fields)'''
         def extract_class_name(line):
             regex = re.compile('object: !ruby/object:(.+)')
@@ -80,7 +83,8 @@ class Job(object, metaclass=Meta):
                 max_attempts=max_attempts,
                 job_id=job_id, attempts=attempts,
                 run_at=run_at, queue=queue, database=database,
-                abstract=True, extra_fields=extra_fields_dict)
+                abstract=True, extra_fields=extra_fields_dict,
+                reporter=reporter)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -94,7 +98,8 @@ class Job(object, metaclass=Meta):
             run_at=run_at, queue=queue, database=database,
             max_attempts=max_attempts,
             attributes=payload['object']['attributes'],
-            abstract=False, extra_fields=extra_fields_dict)
+            abstract=False, extra_fields=extra_fields_dict,
+            reporter=reporter)
 
     def before(self):
         self.logger.debug("Running Job.before hook")
