@@ -16,15 +16,19 @@ class Reporter(object):
     def report(self, **attributes):
         # format attributes
         attributes = self._format_attributes(attributes)
+        self.report_raw(**attributes)
+
+    def report_raw(self, **attributes):
         # report to NewRelic
         self._report_newrelic(attributes)
 
     @contextmanager
     def recorder(self, name):
-        return newrelic.agent.BackgroundTask(
-            application=self._newrelic_app,
-            name=name,
-            group='DelayedJob')
+        with newrelic.agent.BackgroundTask(
+                application=self._newrelic_app,
+                name=name,
+                group='DelayedJob') as task:
+            yield task
 
     def shutdown(self):
         newrelic.agent.shutdown_agent()

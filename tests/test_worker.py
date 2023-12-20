@@ -144,7 +144,8 @@ class TestWorker(TestCase):
 
         self.assert_instrument_context_reports_custom_attributes(job, reporter)
         reporter.record_exception.assert_called_once()
-        reporter.report.assert_any_call(error=True, job_failure=False)
+        reporter.report.assert_any_call(job_failure=False)
+        reporter.report_raw.assert_any_call(error=True)
 
     @patch('pyworker.worker.get_current_time')
     def test_worker_handle_job_when_job_is_unsupported_type_reports_extra_fields(
@@ -182,7 +183,8 @@ class TestWorker(TestCase):
         self.worker.handle_job(job)
 
         reporter.record_exception.assert_not_called()
-        reporter.report.assert_any_call(error=False, job_failure=False)
+        reporter.report.assert_any_call(job_failure=False)
+        reporter.report_raw.assert_any_call(error=False)
         self.assert_instrument_context_reports_custom_attributes(job, reporter)
 
     def test_worker_handle_job_when_error_sets_error_and_unlocks_job(self):
@@ -210,7 +212,8 @@ class TestWorker(TestCase):
 
         self.assert_instrument_context_reports_custom_attributes(job, reporter)
         reporter.record_exception.assert_called_once()
-        reporter.report.assert_any_call(error=True, job_failure=False)
+        reporter.report.assert_any_call(job_failure=False)
+        reporter.report_raw.assert_any_call(error=True)
         job.remove.assert_not_called()
 
     @patch('pyworker.worker.get_current_time')
@@ -228,7 +231,8 @@ class TestWorker(TestCase):
 
         self.assert_instrument_context_reports_custom_attributes(job, reporter)
         reporter.record_exception.assert_called_once()
-        reporter.report.assert_any_call(error=True, job_failure=True)
+        reporter.report.assert_any_call(job_failure=True)
+        reporter.report_raw.assert_any_call(error=True)
         job.remove.assert_not_called()
 
     def test_worker_handle_job_when_error_is_termination_error_bubbles_up(self):
