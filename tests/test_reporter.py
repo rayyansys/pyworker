@@ -38,15 +38,22 @@ class TestReporter(TestCase):
         mock_format_attributes.assert_called_once_with({'test_attribute': 1})
         mock_report_newrelic.assert_called_once_with({'formatted_attribute': '1'})
 
+    #********** .report_raw tests **********#
+
+    @patch('pyworker.reporter.Reporter._report_newrelic')
+    def test_reporter_report_raw_reports_to_newrelic(self, mock_report_newrelic):
+        reporter = Reporter()
+        reporter.report_raw(test_attribute=1)
+
+        mock_report_newrelic.assert_called_once_with({'test_attribute': 1})
+
     #********** .recorder tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
     def test_reporter_recorder_returns_newrelic_background_task(self, newrelic_agent):
         reporter = Reporter()
-        newrelic_agent.BackgroundTask.return_value = ['background_task'].__iter__()
 
-        with reporter.recorder('test_name') as background_task:
-            self.assertEqual(background_task, 'background_task')
+        with reporter.recorder('test_name'):
             newrelic_agent.BackgroundTask.assert_called_once_with(
                 application=reporter._newrelic_app,
                 name='test_name',

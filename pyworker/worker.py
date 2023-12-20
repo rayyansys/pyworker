@@ -181,7 +181,8 @@ class Worker(object):
             finally:
                 # report error status
                 if self.reporter:
-                    self.reporter.report(error=error, job_failure=failed)
+                    self.reporter.report_raw(error=error)
+                    self.reporter.report(job_failure=failed)
                     if caught_exception:
                         self.reporter.record_exception(caught_exception)
                 time_diff = time.time() - start_time
