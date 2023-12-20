@@ -33,8 +33,8 @@ class Reporter(object):
     def shutdown(self):
         newrelic.agent.shutdown_agent()
 
-    def record_exception(self, exception):
-        newrelic.agent.record_exception(exception)
+    def record_exception(self, exc_info):
+        newrelic.agent.notice_error(error=exc_info)
 
     def _format_attributes(self, attributes):
         # prefix then convert all attribute keys to camelCase

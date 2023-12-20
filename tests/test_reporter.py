@@ -72,11 +72,12 @@ class TestReporter(TestCase):
     #********** .record_exception tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
-    def test_reporter_record_exception_calls_newrelic_record_exception(self, newrelic_agent):
+    def test_reporter_record_exception_calls_newrelic_notice_error(self, newrelic_agent):
         reporter = Reporter()
-        reporter.record_exception('test_exception')
+        mock_exc_info = ('test_exception', 'test_value', 'test_traceback')
+        reporter.record_exception(mock_exc_info)
 
-        newrelic_agent.record_exception.assert_called_once_with('test_exception')
+        newrelic_agent.notice_error.assert_called_once_with(error=mock_exc_info)
 
     #********** ._format_attributes tests **********#
 
