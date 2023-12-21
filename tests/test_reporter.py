@@ -1,14 +1,14 @@
 from unittest import TestCase
-from unittest.mock import patch, MagicMock
+from mock import patch, MagicMock
 from pyworker.reporter import Reporter
 
 
 class TestReporter(TestCase):
 
-    def setUp(self) -> None:
+    def setUp(self):
         return super().setUp()
 
-    def tearDown(self) -> None:
+    def tearDown(self):
         return super().tearDown()
 
     #********** __init__ tests **********#

@@ -1,6 +1,6 @@
 import datetime
 from unittest import TestCase
-from unittest.mock import patch, MagicMock
+from mock import patch, MagicMock
 from pyworker.job import Job, get_current_time, get_time_delta
 
 
@@ -53,8 +53,11 @@ class TestJob(TestCase):
             self.mock_run_at,
             self.mock_queue,
             mock_handler,
-            *self.mock_extra_fields.values()
         )
+        # The following is python 2.7 specific (instead of *self.mock_extra_fields above)
+        for value in self.mock_extra_fields.values():
+            mock_row += (value,)
+
         return Job.from_row(mock_row,
                             self.mock_max_attempts,
                             MagicMock(), MagicMock(),

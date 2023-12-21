@@ -1,6 +1,6 @@
 import datetime
 from unittest import TestCase
-from unittest.mock import patch, MagicMock
+from mock import patch, MagicMock
 from pyworker.worker import Worker, TerminatedException
 
 class TestWorker(TestCase):
