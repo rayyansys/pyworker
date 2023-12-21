@@ -14,23 +14,40 @@ class Reporter(object):
         self._newrelic_app = newrelic.agent.register_application()
 
     def report(self, **attributes):
+        # flatten attributes
+        attributes = self._flatten_attributes(attributes)
         # format attributes
         attributes = self._format_attributes(attributes)
+        self.report_raw(**attributes)
+
+    def report_raw(self, **attributes):
         # report to NewRelic
         self._report_newrelic(attributes)
 
     @contextmanager
     def recorder(self, name):
-        return newrelic.agent.BackgroundTask(
-            application=self._newrelic_app,
-            name=name,
-            group='DelayedJob')
+        with newrelic.agent.BackgroundTask(
+                application=self._newrelic_app,
+                name=name,
+                group='DelayedJob') as task:
+            yield task
 
     def shutdown(self):
         newrelic.agent.shutdown_agent()
 
-    def record_exception(self, exception):
-        newrelic.agent.record_exception(exception)
+    def record_exception(self, exc_info):
+        newrelic.agent.notice_error(error=exc_info)
+
+    def _flatten_attributes(self, attributes):
+        # flatten nested dict attributes
+        flattened_attributes = {}
+        for key, value in attributes.items():
+            if type(value) == dict:
+                for nested_key, nested_value in value.items():
+                    flattened_attributes[nested_key] = nested_value
+            else:
+                flattened_attributes[key] = value
+        return flattened_attributes
 
     def _format_attributes(self, attributes):
         # prefix then convert all attribute keys to camelCase

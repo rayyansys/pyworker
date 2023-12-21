@@ -29,24 +29,34 @@ class TestReporter(TestCase):
 
     @patch('pyworker.reporter.Reporter._report_newrelic')
     @patch('pyworker.reporter.Reporter._format_attributes')
-    def test_reporter_report_formats_attributes_and_reports_to_newrelic(
-            self, mock_format_attributes, mock_report_newrelic):
+    @patch('pyworker.reporter.Reporter._flatten_attributes')
+    def test_reporter_report_formats_attributes_and_reports_to_newrelic(self,
+            mock_flatten_attributes, mock_format_attributes, mock_report_newrelic):
         reporter = Reporter()
+        mock_flatten_attributes.return_value = {'flattened_attribute': '1'}
         mock_format_attributes.return_value = {'formatted_attribute': '1'}
-        reporter.report(test_attribute=1)
+        reporter.report(test_attribute={'nested_attribute': 1})
 
-        mock_format_attributes.assert_called_once_with({'test_attribute': 1})
+        mock_flatten_attributes.assert_called_once_with({'test_attribute': {'nested_attribute': 1}})
+        mock_format_attributes.assert_called_once_with({'flattened_attribute': '1'})
         mock_report_newrelic.assert_called_once_with({'formatted_attribute': '1'})
+
+    #********** .report_raw tests **********#
+
+    @patch('pyworker.reporter.Reporter._report_newrelic')
+    def test_reporter_report_raw_reports_to_newrelic(self, mock_report_newrelic):
+        reporter = Reporter()
+        reporter.report_raw(test_attribute=1)
+
+        mock_report_newrelic.assert_called_once_with({'test_attribute': 1})
 
     #********** .recorder tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
     def test_reporter_recorder_returns_newrelic_background_task(self, newrelic_agent):
         reporter = Reporter()
-        newrelic_agent.BackgroundTask.return_value = ['background_task'].__iter__()
 
-        with reporter.recorder('test_name') as background_task:
-            self.assertEqual(background_task, 'background_task')
+        with reporter.recorder('test_name'):
             newrelic_agent.BackgroundTask.assert_called_once_with(
                 application=reporter._newrelic_app,
                 name='test_name',
@@ -65,11 +75,38 @@ class TestReporter(TestCase):
     #********** .record_exception tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
-    def test_reporter_record_exception_calls_newrelic_record_exception(self, newrelic_agent):
+    def test_reporter_record_exception_calls_newrelic_notice_error(self, newrelic_agent):
         reporter = Reporter()
-        reporter.record_exception('test_exception')
+        mock_exc_info = ('test_exception', 'test_value', 'test_traceback')
+        reporter.record_exception(mock_exc_info)
 
-        newrelic_agent.record_exception.assert_called_once_with('test_exception')
+        newrelic_agent.notice_error.assert_called_once_with(error=mock_exc_info)
+
+    #********** ._flatten_attributes tests **********#
+
+    def test_reporter_flatten_attributes_flattens_nested_dict_attributes(self):
+        reporter = Reporter()
+
+        self.assertEqual(
+            reporter._flatten_attributes({
+                'test_key1': 'test_value1',
+                'test_key2': 2,
+                'test_key3': 3.0,
+                'test_key4': True,
+                'test_key5': {'test_key6': [1, 'test_value6']},
+                'test_key7': None,
+                None: 'test_value8'
+            }),
+            {
+                'test_key1': 'test_value1',
+                'test_key2': 2,
+                'test_key3': 3.0,
+                'test_key4': True,
+                'test_key6': [1, 'test_value6'],
+                'test_key7': None,
+                None: 'test_value8'
+            }
+        )
 
     #********** ._format_attributes tests **********#
 
@@ -82,7 +119,7 @@ class TestReporter(TestCase):
                 'test_key2': 2,
                 'test_key3': 3.0,
                 'test_key4': True,
-                'test_key5': {'test_key6': [1, 'test_value6']},
+                'test_key5': [1, 'test_value6'],
                 'test_key7': None,
                 None: 'test_value8'
             }),
@@ -91,7 +128,7 @@ class TestReporter(TestCase):
                 'prefix.testKey2': 2,
                 'prefix.testKey3': 3.0,
                 'prefix.testKey4': True,
-                'prefix.testKey5': '{"test_key6": [1, "test_value6"]}'
+                'prefix.testKey5': '[1, "test_value6"]'
             }
         )
 
