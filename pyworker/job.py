@@ -71,7 +71,11 @@ class Job(object):
 
             return dict(zip(extra_fields, extra_field_values))
 
-        job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
+        # job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
+        # The extended iterable unpacking (using *) does not work under python 2.7
+        job_id, attempts, run_at, queue, handler = job_row[:5]
+        extra_field_values = job_row[5:]
+
         extra_fields_dict = extract_extra_fields(extra_fields, extra_field_values)
         handler = handler.splitlines()
 

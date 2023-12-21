@@ -1,6 +1,6 @@
 pytest==4.6.11
-mock
+mock==3.0.5
 newrelic==9.3.0
-PyYAML==5.4.1
+PyYAML==5.3.1
 python-dateutil==2.6.0
 psycopg2-binary==2.8.6

@@ -1,13 +1,15 @@
-FROM python:2.7-jessie
+FROM python:2.7.18-buster
 
-LABEL maintainer="Hossam Hammady <github@hammady.net>"
+LABEL maintainer="Hossam Hammady <hossam@rayyan.ai>"
 
 WORKDIR /home
 
+# install deps first
+RUN pip install --upgrade pip
+COPY requirements-test.txt /home/
+RUN pip install -r requirements-test.txt
+
+# copy rest of files
 COPY / /home/
 
-RUN pip install --upgrade pip && \
-    pip install twine && \
-    python setup.py sdist bdist_wheel
-
-CMD ["twine", "upload", "dist/*"]
+CMD ["pytest"]

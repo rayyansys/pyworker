@@ -5,12 +5,6 @@ from pyworker.reporter import Reporter
 
 class TestReporter(TestCase):
 
-    def setUp(self):
-        return super().setUp()
-
-    def tearDown(self):
-        return super().tearDown()
-
     #********** __init__ tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
