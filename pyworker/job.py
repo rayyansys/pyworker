@@ -19,26 +19,32 @@ class Job(object):
     """docstring for Job"""
     __metaclass__ = Meta
     def __init__(self, class_name, database, logger,
-        job_id, queue, run_at, attempts=0, max_attempts=1, attributes=None):
+                 job_id, queue, run_at, attempts=0, max_attempts=1,
+                 attributes=None, abstract=False, extra_fields=None,
+                 reporter=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
         self.logger = logger
         self.job_id = job_id
+        self.job_name = '%s#run' % class_name
         self.attempts = attempts
         self.run_at = run_at
         self.queue = queue
         self.max_attempts = max_attempts
         self.attributes = attributes
+        self.abstract = abstract
+        self.extra_fields = extra_fields
+        self.reporter = reporter
 
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, str(self.__dict__))
 
     @classmethod
-    def from_row(cls, job_row, max_attempts, database, logger):
-        '''job_row is a tuple of (id, attempts, run_at, queue, handler)'''
+    def from_row(cls, job_row, max_attempts, database, logger,
+                 extra_fields=None, reporter=None):
+        '''job_row is a tuple of (id, attempts, run_at, queue, handler, *extra_fields)'''
         def extract_class_name(line):
-            # TODO cache regex
             regex = re.compile('object: !ruby/object:(.+)')
             match = regex.match(line)
             if match:
@@ -59,7 +65,18 @@ class Job(object):
                     attributes.append(line)
             return attributes
 
-        job_id, attempts, run_at, queue, handler = job_row
+        def extract_extra_fields(extra_fields, extra_field_values):
+            if extra_fields is None or extra_field_values is None:
+                return None
+
+            return dict(zip(extra_fields, extra_field_values))
+
+        # job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
+        # The extended iterable unpacking (using *) does not work under python 2.7
+        job_id, attempts, run_at, queue, handler = job_row[:5]
+        extra_field_values = job_row[5:]
+
+        extra_fields_dict = extract_extra_fields(extra_fields, extra_field_values)
         handler = handler.splitlines()
 
         class_name = extract_class_name(handler[1])
@@ -70,7 +87,9 @@ class Job(object):
             return Job(class_name=class_name, logger=logger,
                 max_attempts=max_attempts,
                 job_id=job_id, attempts=attempts,
-                run_at=run_at, queue=queue, database=database)
+                run_at=run_at, queue=queue, database=database,
+                abstract=True, extra_fields=extra_fields_dict,
+                reporter=reporter)
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -83,7 +102,9 @@ class Job(object):
             job_id=job_id, attempts=attempts,
             run_at=run_at, queue=queue, database=database,
             max_attempts=max_attempts,
-            attributes=payload['object']['attributes'])
+            attributes=payload['object']['attributes'],
+            abstract=False, extra_fields=extra_fields_dict,
+            reporter=reporter)
 
     def before(self):
         self.logger.debug("Running Job.before hook")
@@ -101,21 +122,26 @@ class Job(object):
         self.logger.debug("Running Job.success hook")
 
     def set_error_unlock(self, error):
+        failed = False
         self.logger.error('Job %d raised error: %s' % (self.job_id, error))
         # run error hook
         self.error(error)
         self.attempts += 1
         now = get_current_time()
         setters = [
-            'locked_at = null',
-            'locked_by = null',
-            'attempts = %d' % self.attempts,
+            'locked_at = %s',
+            'locked_by = %s',
+            'attempts = %s',
             'last_error = %s'
         ]
         values = [
+            None,
+            None,
+            self.attempts,
             error
         ]
         if self.attempts >= self.max_attempts:
+            failed = True
             # set failed_at = now
             setters.append('failed_at = %s')
             values.append(now)
@@ -125,15 +151,20 @@ class Job(object):
             setters.append('run_at = %s')
             delta = (self.attempts**4) + 5
             values.append(str(now + get_time_delta(seconds=delta)))
-        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
-            (', '.join(setters), self.job_id)
-        self.logger.debug('set error query: %s' % query)
-        self.logger.debug('set error values: %s' % str(values))
-        self.database.cursor().execute(query, tuple(values))
-        self.database.commit()
+
+        self._update_job(setters, values)
+        return failed
 
     def remove(self):
         self.logger.debug('Job %d finished successfully' % self.job_id)
         query = 'DELETE FROM delayed_jobs WHERE id = %d' % self.job_id
         self.database.cursor().execute(query)
+        self.database.commit()
+
+    def _update_job(self, setters, values):
+        query = 'UPDATE delayed_jobs SET %s WHERE id = %d' % \
+            (', '.join(setters), self.job_id)
+        self.logger.debug('update query: %s' % query)
+        self.logger.debug('update values: %s' % str(values))
+        self.database.cursor().execute(query, tuple(values))
         self.database.commit()
