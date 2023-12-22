@@ -9,8 +9,8 @@ requirements = [
 
 setup(
     name = "rubydj-pyworker",
-    version = '1.0.0',
-    description="A pure Python worker for Ruby-based DelayedJobs",
+    version = '1.1.0',
+    description="A pure Python worker for Ruby-based DelayedJobs with Newrelic reporting.",
     author="Hossam Hammady",
     author_email="github@hammady.net",
     url="https://github.com/rayyansys/pyworker",

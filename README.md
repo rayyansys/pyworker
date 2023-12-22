@@ -34,11 +34,13 @@ that supports Python 3.x (>= 1.0.0).
 
 The simplest usage is creating a worker and running it:
 
-    from pyworker.worker import Worker
+```python
+from pyworker.worker import Worker
 
-    dbstring = 'postgres://user:password@host:port/database'
-    w = Worker(dbstring)
-    w.run()
+dbstring = 'postgres://user:password@host:port/database'
+w = Worker(dbstring)
+w.run()
+```
 
 This will create a worker that continuously polls the specified database
 and pick up jobs to run. Of course, no jobs will be recognized so one should
@@ -46,34 +48,36 @@ declare jobs before calling the worker.
 
 Example job:
 
-    from pyworker.job import Job
+```python
+from pyworker.job import Job
 
-    class MyJob(Job):
-        def __init__(self, *args, **kwargs):
-            super(MyJob, self).__init__(*args, **kwargs)
+class MyJob(Job):
+    def __init__(self, *args, **kwargs):
+        super(MyJob, self).__init__(*args, **kwargs)
 
-        def run(self):
-            self.logger.info("Running MyJob.run")
+    def run(self):
+        self.logger.info("Running MyJob.run")
 
-        # optional
-        def before(self):
-            self.logger.debug("Running MyJob.before hook")
+    # optional
+    def before(self):
+        self.logger.debug("Running MyJob.before hook")
 
-        # optional
-        def after(self):
-            self.logger.debug("Running MyJob.after hook")
+    # optional
+    def after(self):
+        self.logger.debug("Running MyJob.after hook")
 
-        # optional
-        def success(self):
-            self.logger.debug("Running MyJob.success hook")
+    # optional
+    def success(self):
+        self.logger.debug("Running MyJob.success hook")
 
-        # optional
-        def error(self):
-            self.logger.debug("Running MyJob.error hook")
+    # optional
+    def error(self):
+        self.logger.debug("Running MyJob.error hook")
 
-        # optional
-        def failure(self):
-            self.logger.debug("Running MyJob.failure hook")
+    # optional
+    def failure(self):
+        self.logger.debug("Running MyJob.failure hook")
+```
 
 Once this example job is declared, the worker can recognize it and
 will call its `run` method once it is picked up, optionally with the
@@ -84,28 +88,101 @@ specified hooks.
 Before calling the `run` method on the worker, you have these
 configuration options:
 
-    # seconds between database polls (default 10)
-    w.sleep_delay = 3
+```python
+# seconds between database polls (default 10)
+w.sleep_delay = 3
 
-    # maximum attempts before marking the job as permanently failing (default 3)
-    w.max_attempts = 5
+# maximum attempts before marking the job as permanently failing (default 3)
+w.max_attempts = 5
 
-    # maximum run time allowed for the job, before it expires (default 3600)
-    w.max_run_time = 14400
+# maximum run time allowed for the job, before it expires (default 3600)
+w.max_run_time = 14400
 
-    # queue names to poll from the datbase, comma separated (default: 'default')
-    w.queue_names = 'queue1,queue2'
+# queue names to poll from the datbase, comma separated (default: 'default')
+w.queue_names = 'queue1,queue2'
+```
 
-Youc an also provide a logger class (from `logging` module) to have full control on logging configuration:
+You can also provide a logger class (from `logging` module) to have full control on logging configuration:
 
-    import logging
+```python
+import logging
 
-    logging.basicConfig()
-    logger = logging.getLogger('pyworker')
-    logger.setLevel(logging.INFO)
+logging.basicConfig()
+logger = logging.getLogger('pyworker')
+logger.setLevel(logging.INFO)
 
-    w = Worker(dbstring, logger)
-    w.run()
+w = Worker(dbstring, logger)
+w.run()
+```
+
+## Monitoring
+
+Workers can be monitored using [Newrelic](https://newrelic.com/). All you need
+to do is to create a free account there, then add the following to your
+environment variables:
+
+```bash
+NEW_RELIC_LICENSE_KEY=<your_newrelic_license_key>
+NEW_RELIC_APP_NAME=<your_newrelic_app_name>
+```
+
+All jobs will be reported under the `BackgroundTask` category. This includes
+standard metrics like throughput, response time (job duration), error rate, etc.
+Additional transaction custom attributes are also reported out of the box:
+1. `jobName`: the name of the job class
+1. `jobId`: the id of the delayed job in the database
+1. `jobQueue`: the queue name of the job
+1. `jobAttempts`: the number of attempts for the job
+1. `jobLatency`: the time between the job creation and the time it was picked up by the worker
+
+If you wish to automatically report additional attributes from the delayed job table
+(e.g. the priority of the job or any other custom fields), you can do so by
+providing a list of fields to the worker:
+
+```python
+worker = Worker(dbstring,
+    logger=logger,
+    extra_delayed_job_fields=['priority', 'custom_field'])
+```
+
+Columns of types `string`/`text`, `int`, `float` and `bool` are reported as is.
+`json`/`jsonb` types are expanded into separate attributes. All other fields are converted
+to JSON strings.
+
+You can also automatically prefix all attributes with a string before reporting:
+
+```python
+worker = Worker(dbstring,
+    logger=logger,
+    reported_attributes_prefix='myapp.')
+```
+
+If you wish to report additional custom attributes from your job, you can do so
+by calling the `reporter` object that is available in the job instance:
+
+```python
+class MyJob(Job):
+    def __init__(self, *args, **kwargs):
+        super(MyJob, self).__init__(*args, **kwargs)
+
+    def run(self):
+        ...
+        self.reporter.report(
+            my_custom_attribute='my_custom_value',
+            another_custom_attribute='another_custom_value',
+            ...)
+        ...
+```
+
+The prefix will be applied to all attributes reported from the job as well
+as the camel case conversion. If you wish to skip both, you can use the
+`report_raw` function instead of `report`.
+
+In all cases, two additional attributes are reported:
+1. `error`: a Boolean indicating whether the job has failed or not
+1. `jobFailure`: a Boolean indicating whether the job has permanently failed or not
+
+The `error` attribute is reported as is, i.e. without prefix or camel case conversion.
 
 ## Limitations
 
@@ -133,20 +210,11 @@ Do your changes, then send a pull request.
 
 ## Publish
 
-### Using Python
 1. Increment the version number in `setup.py`
-1. Install twine: `pip install twine`. You may need to upgrade pip first: `pip install --upgrade pip`
+1. Install `twine` and `wheel`: `pip install twine wheel`. You may need to upgrade pip first: `pip install --upgrade pip`
 1. Create the distribution files: `python setup.py sdist bdist_wheel`
 1. Optionally upload to [Test PyPi](https://test.pypi.org/) as a dry run: `twine upload -r testpypi dist/*`. You will need a separate account there
 1. Upload to [PyPi](https://pypi.org/): `twine upload dist/*`
-
-### Using Docker
-Increment the version as in the first step above then:
-
-```bash
-docker build . -t pyworker:0.1.0
-docker run -it --rm pyworker:0.1.0
-```
 
 Enter your PyPi username and password when prompted.
 
