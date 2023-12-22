@@ -4,7 +4,7 @@ requirements = [
     'psycopg2-binary>=2',
     'python-dateutil>=2',
     'PyYAML>=3',
-    'newrelic>=7'
+    'newrelic>=8.3.0'
 ]
 
 setup(
