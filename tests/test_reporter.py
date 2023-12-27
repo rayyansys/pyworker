@@ -110,6 +110,7 @@ class TestReporter(TestCase):
         self.assertEqual(
             reporter._format_attributes({
                 'test_key1': 'test_value1',
+                'test_key1b': u'test_value1b', # specific to python 2.7
                 'test_key2': 2,
                 'test_key3': 3.0,
                 'test_key4': True,
@@ -119,6 +120,7 @@ class TestReporter(TestCase):
             }),
             {
                 'prefix.testKey1': 'test_value1',
+                'prefix.testKey1B': u'test_value1b', # specific to python 2.7
                 'prefix.testKey2': 2,
                 'prefix.testKey3': 3.0,
                 'prefix.testKey4': True,
@@ -156,6 +158,11 @@ class TestReporter(TestCase):
         self.assertEqual(
             reporter._convert_value('test_value'),
             'test_value'
+        )
+        # specific to python 2.7
+        self.assertEqual(
+            reporter._convert_value(u'test_value'),
+            u'test_value'
         )
         self.assertEqual(
             reporter._convert_value(1),

@@ -64,7 +64,8 @@ class Reporter(object):
 
     @staticmethod
     def _convert_value(value):
-        if type(value) not in [str, int, float, bool]:
+        # unicode is needed in python2.7 only, otherwise it raises an error
+        if type(value) not in [str, int, float, bool, unicode]:
             return json.dumps(value)
         return value
 
