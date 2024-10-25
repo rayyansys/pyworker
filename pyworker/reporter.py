@@ -75,7 +75,10 @@ class Reporter(object):
         possible_keys = [f'{self._prefix}userId', f'{self._prefix}user_id', 'userId', 'user_id']
         possible_values = [attributes.get(key) for key in possible_keys if key in attributes]
         if possible_values:
-            newrelic.agent.set_user_id(str(possible_values[0]))
+            user_id = str(possible_values[0])
+            newrelic.agent.set_user_id(user_id)
+            if self._logger:
+                self._logger.debug('Reporter: reporting to NewRelic user_id: %s' % user_id)
         # convert attributes dict to list of tuples
         attributes = list(attributes.items())
         newrelic.agent.add_custom_attributes(attributes)
