@@ -188,7 +188,7 @@ class TestReporter(TestCase):
     #********** ._report_newrelic tests **********#
 
     @patch('pyworker.reporter.newrelic.agent')
-    def test_reporter_report_newrelic_calls_newrelic_record_exception(self, newrelic_agent):
+    def test_reporter_report_newrelic_calls_newrelic_add_custom_attributes(self, newrelic_agent):
         reporter = Reporter()
         reporter._report_newrelic({
             'test_key1': 'test_value',
@@ -199,3 +199,57 @@ class TestReporter(TestCase):
             ('test_key1', 'test_value'),
             ('test_key2', 2)
         ])
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_does_not_call_newrelic_set_user_id_if_user_id_not_in_attributes(self, newrelic_agent):
+        reporter = Reporter()
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2
+        })
+
+        newrelic_agent.set_user_id.assert_not_called()
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_calls_newrelic_set_user_id_if_user_id_in_attributes(self, newrelic_agent):
+        reporter = Reporter()
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2,
+            'user_id': 123
+        })
+
+        newrelic_agent.set_user_id.assert_called_once_with('123')
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_calls_newrelic_set_user_id_if_userId_in_attributes(self, newrelic_agent):
+        reporter = Reporter()
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2,
+            'userId': 123
+        })
+
+        newrelic_agent.set_user_id.assert_called_once_with('123')
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_calls_newrelic_set_user_id_if_prefixed_user_id_in_attributes(self, newrelic_agent):
+        reporter = Reporter(attribute_prefix='test_')
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2,
+            'test_user_id': 123
+        })
+
+        newrelic_agent.set_user_id.assert_called_once_with('123')
+
+    @patch('pyworker.reporter.newrelic.agent')
+    def test_reporter_report_newrelic_calls_newrelic_set_user_id_if_prefixed_userId_in_attributes(self, newrelic_agent):
+        reporter = Reporter(attribute_prefix='test_')
+        reporter._report_newrelic({
+            'test_key1': 'test_value',
+            'test_key2': 2,
+            'test_userId': 123
+        })
+
+        newrelic_agent.set_user_id.assert_called_once_with('123')
