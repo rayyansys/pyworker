@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - tasks/6106
 jobs:
   testpypi-publish:
     name: Upload release to TestPyPI
