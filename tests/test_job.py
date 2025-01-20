@@ -210,6 +210,26 @@ class TestJob(TestCase):
 
         self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 6))
 
+    ## run_at
+    @patch('pyworker.job.get_current_time')
+    def test_set_error_unlock_if_delta_doesnt_exceed_max_delta(
+            self, mock_get_current_time):
+        mock_get_current_time.return_value = self.mock_now
+        job = self.load_registered_job()
+        job.max_delta = 8
+
+        self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 6))
+
+    ## run_at
+    @patch('pyworker.job.get_current_time')
+    def test_set_error_unlock_if_delta_exceeds_max_delta(
+            self, mock_get_current_time):
+        mock_get_current_time.return_value = self.mock_now
+        job = self.load_registered_job()
+        job.max_delta = 2
+
+        self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 2))
+
     @patch('pyworker.job.get_current_time')
     def test_set_error_unlock_if_max_attempts_not_exceeded_updates_run_at_exponentially_when_attempts_1(
             self, mock_get_current_time):

@@ -20,7 +20,7 @@ class Job(object, metaclass=Meta):
     def __init__(self, class_name, database, logger,
                  job_id, queue, run_at, attempts=0, max_attempts=1,
                  attributes=None, abstract=False, extra_fields=None,
-                 reporter=None):
+                 reporter=None, max_delta=-1):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -28,6 +28,7 @@ class Job(object, metaclass=Meta):
         self.job_id = job_id
         self.job_name = '%s#run' % class_name
         self.attempts = attempts
+        self.max_delta = max_delta
         self.run_at = run_at
         self.queue = queue
         self.max_attempts = max_attempts
@@ -145,6 +146,8 @@ class Job(object, metaclass=Meta):
             # set new exponential run_at
             setters.append('run_at = %s')
             delta = (self.attempts**4) + 5
+            if self.max_delta > 0 and delta > self.max_delta:
+                delta = self.max_delta
             values.append(str(now + get_time_delta(seconds=delta)))
 
         self._update_job(setters, values)
