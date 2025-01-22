@@ -22,6 +22,7 @@ class Worker(object):
         self.sleep_delay = 10
         self.max_attempts = 3
         self.max_run_time = 3600
+        self.max_backoff_delay_seconds = 60
         self.queue_names = 'default'
         hostname = os.uname()[1]
         pid = os.getpid()
@@ -147,7 +148,8 @@ class Worker(object):
             return Job.from_row(job_row, max_attempts=self.max_attempts,
                 database=self.database, logger=self.logger,
                 extra_fields=self.extra_delayed_job_fields,
-                reporter=self.reporter)
+                reporter=self.reporter, max_backoff_delay_seconds=self.max_backoff_delay_seconds
+            )
         else:
             return None
 

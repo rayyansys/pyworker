@@ -42,7 +42,7 @@ class Job(object, metaclass=Meta):
 
     @classmethod
     def from_row(cls, job_row, max_attempts, database, logger,
-                 extra_fields=None, reporter=None):
+                 extra_fields=None, reporter=None, max_backoff_delay_seconds=None):
         '''job_row is a tuple of (id, attempts, run_at, queue, handler, *extra_fields)'''
         def extract_class_name(line):
             regex = re.compile('object: !ruby/object:(.+)')
@@ -85,7 +85,8 @@ class Job(object, metaclass=Meta):
                 job_id=job_id, attempts=attempts,
                 run_at=run_at, queue=queue, database=database,
                 abstract=True, extra_fields=extra_fields_dict,
-                reporter=reporter)
+                reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
+            )
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -100,7 +101,8 @@ class Job(object, metaclass=Meta):
             max_attempts=max_attempts,
             attributes=payload['object']['attributes'],
             abstract=False, extra_fields=extra_fields_dict,
-            reporter=reporter)
+            reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
+        )
 
     def before(self):
         self.logger.debug("Running Job.before hook")
