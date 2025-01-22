@@ -45,6 +45,7 @@ class TestWorker(TestCase):
         self.assertEqual(worker.sleep_delay, 10)
         self.assertEqual(worker.max_attempts, 3)
         self.assertEqual(worker.max_run_time, 3600)
+        self.assertEqual(worker.max_backoff_delay_seconds, 60)
         self.assertEqual(worker.queue_names, 'default')
         self.assertEqual(worker.name, 'host:localhost pid:1234')
         self.assertIsNone(worker.extra_delayed_job_fields)
