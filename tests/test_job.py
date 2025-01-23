@@ -32,7 +32,7 @@ class TestJob(TestCase):
         with open('tests/fixtures/%s' % filename) as f:
             return f.read()
 
-    def load_job(self, filename):
+    def load_job(self, filename, max_backoff_delay_seconds=None):
         mock_handler = self.load_fixture(filename)
         mock_row = (
             self.mock_job_id,
@@ -43,7 +43,9 @@ class TestJob(TestCase):
         )
         return Job.from_row(mock_row,
                             self.mock_max_attempts,
-                            MagicMock(), MagicMock())
+                            MagicMock(), MagicMock(),
+                            max_backoff_delay_seconds=max_backoff_delay_seconds
+                        )
 
     def load_job_with_extra_fields(self, filename):
         mock_handler = self.load_fixture(filename)
@@ -71,8 +73,8 @@ class TestJob(TestCase):
         job.reporter = reporter
         return job
 
-    def load_registered_job(self):
-        job = self.load_job('handler_registered.yaml')
+    def load_registered_job(self, max_backoff_delay_seconds=None):
+        job = self.load_job('handler_registered.yaml', max_backoff_delay_seconds=max_backoff_delay_seconds)
         job.error = MagicMock()
         job.failure = MagicMock()
         job._update_job = MagicMock()
@@ -209,6 +211,33 @@ class TestJob(TestCase):
         job = self.load_registered_job()
 
         self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 6))
+
+    ## run_at
+    @patch('pyworker.job.get_current_time')
+    def test_set_error_unlock_if_delta_doesnt_exceed_max_backoff_delay_seconds(
+            self, mock_get_current_time):
+        mock_get_current_time.return_value = self.mock_now
+        job = self.load_registered_job(max_backoff_delay_seconds=8)
+
+        self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 6))
+
+    ## run_at
+    @patch('pyworker.job.get_current_time')
+    def test_set_error_unlock_if_delta_exceeds_max_backoff_delay_seconds(
+            self, mock_get_current_time):
+        mock_get_current_time.return_value = self.mock_now
+        job = self.load_registered_job(max_backoff_delay_seconds=5)
+
+        self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 5))
+
+    ## run_at
+    @patch('pyworker.job.get_current_time')
+    def test_set_error_unlock_if_max_backoff_delay_seconds_less_than_minimum(
+            self, mock_get_current_time):
+        mock_get_current_time.return_value = self.mock_now
+        job = self.load_registered_job(max_backoff_delay_seconds=2)
+
+        self.assert_job_updated_run_at(job, attempts=0, expected_value=datetime.datetime(2023, 10, 7, 0, 0, 5))
 
     @patch('pyworker.job.get_current_time')
     def test_set_error_unlock_if_max_attempts_not_exceeded_updates_run_at_exponentially_when_attempts_1(

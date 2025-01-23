@@ -20,7 +20,7 @@ class Job(object, metaclass=Meta):
     def __init__(self, class_name, database, logger,
                  job_id, queue, run_at, attempts=0, max_attempts=1,
                  attributes=None, abstract=False, extra_fields=None,
-                 reporter=None):
+                 reporter=None, max_backoff_delay_seconds=None):
         super(Job, self).__init__()
         self.class_name = class_name
         self.database = database
@@ -28,6 +28,9 @@ class Job(object, metaclass=Meta):
         self.job_id = job_id
         self.job_name = '%s#run' % class_name
         self.attempts = attempts
+        if max_backoff_delay_seconds:
+            max_backoff_delay_seconds = max(max_backoff_delay_seconds, 5) # max_backoff_delay_seconds can not be less than 5 seconds
+        self.max_backoff_delay_seconds = max_backoff_delay_seconds
         self.run_at = run_at
         self.queue = queue
         self.max_attempts = max_attempts
@@ -41,7 +44,7 @@ class Job(object, metaclass=Meta):
 
     @classmethod
     def from_row(cls, job_row, max_attempts, database, logger,
-                 extra_fields=None, reporter=None):
+                 extra_fields=None, reporter=None, max_backoff_delay_seconds=None):
         '''job_row is a tuple of (id, attempts, run_at, queue, handler, *extra_fields)'''
         def extract_class_name(line):
             regex = re.compile('object: !ruby/object:(.+)')
@@ -84,7 +87,8 @@ class Job(object, metaclass=Meta):
                 job_id=job_id, attempts=attempts,
                 run_at=run_at, queue=queue, database=database,
                 abstract=True, extra_fields=extra_fields_dict,
-                reporter=reporter)
+                reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
+            )
 
         attributes = extract_attributes(handler[2:])
         logger.debug("Found attributes: %s" % str(attributes))
@@ -99,7 +103,8 @@ class Job(object, metaclass=Meta):
             max_attempts=max_attempts,
             attributes=payload['object']['attributes'],
             abstract=False, extra_fields=extra_fields_dict,
-            reporter=reporter)
+            reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
+        )
 
     def before(self):
         self.logger.debug("Running Job.before hook")
@@ -145,6 +150,8 @@ class Job(object, metaclass=Meta):
             # set new exponential run_at
             setters.append('run_at = %s')
             delta = (self.attempts**4) + 5
+            if self.max_backoff_delay_seconds and delta > self.max_backoff_delay_seconds:
+                delta = self.max_backoff_delay_seconds
             values.append(str(now + get_time_delta(seconds=delta)))
 
         self._update_job(setters, values)
