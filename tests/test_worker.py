@@ -39,7 +39,7 @@ class TestWorker(TestCase):
     @patch('pyworker.worker.os.getpid', return_value=1234)
     @patch('pyworker.worker.DBConnector')
     def test_worker_init(self, mock_db, *_):
-        worker = Worker('dummy')
+        worker = Worker('dummy', max_backoff_delay_seconds=60)
 
         self.assertEqual(worker.database, mock_db.return_value)
         self.assertEqual(worker.sleep_delay, 10)

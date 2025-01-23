@@ -14,7 +14,8 @@ class TerminatedException(Exception): pass
 class Worker(object):
     def __init__(self, dbstring, logger=None,
                  extra_delayed_job_fields=None,
-                 reported_attributes_prefix=''):
+                 reported_attributes_prefix='',
+                 max_backoff_delay_seconds=None):
         super(Worker, self).__init__()
         self.logger = Logger(logger)
         self.logger.info('Starting pyworker...')
@@ -22,7 +23,7 @@ class Worker(object):
         self.sleep_delay = 10
         self.max_attempts = 3
         self.max_run_time = 3600
-        self.max_backoff_delay_seconds = 60
+        self.max_backoff_delay_seconds = max_backoff_delay_seconds
         self.queue_names = 'default'
         hostname = os.uname()[1]
         pid = os.getpid()

@@ -29,7 +29,7 @@ class Job(object, metaclass=Meta):
         self.job_name = '%s#run' % class_name
         self.attempts = attempts
         if max_backoff_delay_seconds:
-            max_backoff_delay_seconds = max(max_backoff_delay_seconds, 2) # max_backoff_delay_seconds can not be less than 2 seconds
+            max_backoff_delay_seconds = max(max_backoff_delay_seconds, 5) # max_backoff_delay_seconds can not be less than 5 seconds
         self.max_backoff_delay_seconds = max_backoff_delay_seconds
         self.run_at = run_at
         self.queue = queue

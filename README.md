@@ -99,7 +99,7 @@ w.sleep_delay = 3
 w.max_attempts = 5
 
 # sets a cap on how long a worker should wait between retry attempts.
-# if not set, the backoff delay time will grow exponentially (default 60)
+# if not set, the backoff delay time will grow exponentially (minimum is 5)
 w.max_backoff_delay_seconds = 60
 
 # maximum run time allowed for the job, before it expires (default 3600)
