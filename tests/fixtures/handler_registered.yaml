@@ -9,7 +9,7 @@ object: !ruby/object:RegisteredJob
     total_articles: 1000
     is_blind: true
     extra_new_line: 'line one
-    '
+      abc'
   attributes: !ruby/object:ActiveRecord::AttributeSet
     attributes: !ruby/object:ActiveRecord::LazyAttributeHash
       types: {}

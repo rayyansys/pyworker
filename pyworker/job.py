@@ -1,6 +1,6 @@
 import re
 import yaml
-from pyworker.util import get_current_time, get_time_delta, squash_multiline_yaml
+from pyworker.util import get_current_time, get_time_delta
 
 _job_class_registry = {}
 
@@ -19,7 +19,8 @@ class IgnoreUnknownTagsLoader(yaml.SafeLoader):
     def ignore_unknown(self, node):
         return None
 
-
+def no_ruby_objects(loader, tag_suffix, node):
+    return loader.construct_mapping(node)
 
 class Job(object, metaclass=Meta):
     """docstring for Job"""
@@ -60,19 +61,6 @@ class Job(object, metaclass=Meta):
             else:
                 return None
 
-        def extract_attributes(lines):
-            attributes = []
-            collect = False
-            for line in lines:
-                if line.startswith('  raw_attributes:'):
-                    collect = True
-                elif not line.startswith('    '):
-                    if collect:
-                        break
-                elif collect:
-                    attributes.append(line)
-            return attributes
-
         def extract_extra_fields(extra_fields, extra_field_values):
             if extra_fields is None or extra_field_values is None:
                 return None
@@ -82,7 +70,6 @@ class Job(object, metaclass=Meta):
         job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
         extra_fields_dict = extract_extra_fields(extra_fields, extra_field_values)
         handler = handler.splitlines()
-        handler = squash_multiline_yaml(handler)
 
         class_name = extract_class_name(handler[1])
         logger.debug("Found Job %d with class name: %s" % (job_id, class_name))
@@ -96,11 +83,11 @@ class Job(object, metaclass=Meta):
                 abstract=True, extra_fields=extra_fields_dict,
                 reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
             )
-
-        attributes = extract_attributes(handler[2:])
+        attributes = handler[3:]
         logger.debug("Found attributes: %s" % str(attributes))
 
-        stripped = '\n'.join(['object:', '  attributes:'] + attributes)
+        stripped = '\n'.join(['object:', '  raw_attributes:'] + attributes)
+        yaml.SafeLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
         payload = yaml.load(stripped, Loader=IgnoreUnknownTagsLoader)
         logger.debug("payload object: %s" % str(payload))
 
@@ -108,7 +95,7 @@ class Job(object, metaclass=Meta):
             job_id=job_id, attempts=attempts,
             run_at=run_at, queue=queue, database=database,
             max_attempts=max_attempts,
-            attributes=payload['object']['attributes'],
+            attributes=payload['object']['raw_attributes'],
             abstract=False, extra_fields=extra_fields_dict,
             reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
         )
