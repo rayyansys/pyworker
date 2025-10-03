@@ -15,6 +15,12 @@ class Meta(type):
         return cls
 
 
+class IgnoreUnknownTagsLoader(yaml.SafeLoader):
+    def ignore_unknown(self, node):
+        return None
+
+
+
 class Job(object, metaclass=Meta):
     """docstring for Job"""
     def __init__(self, class_name, database, logger,
@@ -95,7 +101,7 @@ class Job(object, metaclass=Meta):
         logger.debug("Found attributes: %s" % str(attributes))
 
         stripped = '\n'.join(['object:', '  attributes:'] + attributes)
-        payload = yaml.load(stripped, Loader=yaml.FullLoader)
+        payload = yaml.load(stripped, Loader=IgnoreUnknownTagsLoader)
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
