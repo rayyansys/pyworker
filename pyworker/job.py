@@ -16,11 +16,13 @@ class Meta(type):
 
 
 class IgnoreUnknownTagsLoader(yaml.SafeLoader):
-    def ignore_unknown(self, node):
-        return None
+    """Custom YAML loader that ignores unknown Ruby object tags."""
 
 def no_ruby_objects(loader, tag_suffix, node):
+    # Construct mapping normally, ignoring Ruby-specific tags
     return loader.construct_mapping(node)
+
+
 
 class Job(object, metaclass=Meta):
     """docstring for Job"""
@@ -87,7 +89,8 @@ class Job(object, metaclass=Meta):
         logger.debug("Found attributes: %s" % str(attributes))
 
         stripped = '\n'.join(['object:', '  raw_attributes:'] + attributes)
-        yaml.SafeLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
+
+        IgnoreUnknownTagsLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
         payload = yaml.load(stripped, Loader=IgnoreUnknownTagsLoader)
         logger.debug("payload object: %s" % str(payload))
 
