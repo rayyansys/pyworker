@@ -1,6 +1,6 @@
 import re
 import yaml
-from pyworker.util import get_current_time, get_time_delta
+from pyworker.util import get_current_time, get_time_delta, squash_multiline_yaml
 
 _job_class_registry = {}
 
@@ -76,6 +76,7 @@ class Job(object, metaclass=Meta):
         job_id, attempts, run_at, queue, handler, *extra_field_values = job_row
         extra_fields_dict = extract_extra_fields(extra_fields, extra_field_values)
         handler = handler.splitlines()
+        handler = squash_multiline_yaml(handler)
 
         class_name = extract_class_name(handler[1])
         logger.debug("Found Job %d with class name: %s" % (job_id, class_name))

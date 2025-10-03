@@ -145,7 +145,8 @@ class TestJob(TestCase):
             'title': 'review title',
             'description': 'review description\nmultiline\n',
             'total_articles': 1000,
-            'is_blind': True
+            'is_blind': True,
+            'extra_new_line': 'line one\\n    ',
         })
         self.assertIsNone(job.reporter)
 
