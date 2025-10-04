@@ -18,10 +18,10 @@ class Meta(type):
 class IgnoreUnknownTagsLoader(yaml.SafeLoader):
     """Custom YAML loader that ignores unknown Ruby object tags."""
 
+
 def no_ruby_objects(loader, tag_suffix, node):
     # Construct mapping normally, ignoring Ruby-specific tags
     return loader.construct_mapping(node)
-
 
 
 class Job(object, metaclass=Meta):
