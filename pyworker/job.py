@@ -2,6 +2,7 @@ import re
 import yaml
 from pyworker.util import get_current_time, get_time_delta
 
+
 _job_class_registry = {}
 
 def _register_class(target_class):
@@ -13,6 +14,14 @@ class Meta(type):
         cls = type.__new__(meta, name, bases, class_dict)
         _register_class(cls)
         return cls
+
+
+# Add a YAML constructor to ignore Ruby-specific tags (required once at module load time)
+def no_ruby_objects(loader, tag_suffix, node):
+    # Construct mapping normally, ignoring Ruby-specific tags
+    return loader.construct_mapping(node)
+
+yaml.SafeLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
 
 
 class Job(object, metaclass=Meta):
@@ -54,19 +63,6 @@ class Job(object, metaclass=Meta):
             else:
                 return None
 
-        def extract_attributes(lines):
-            attributes = []
-            collect = False
-            for line in lines:
-                if line.startswith('  raw_attributes:'):
-                    collect = True
-                elif not line.startswith('    '):
-                    if collect:
-                        break
-                elif collect:
-                    attributes.append(line)
-            return attributes
-
         def extract_extra_fields(extra_fields, extra_field_values):
             if extra_fields is None or extra_field_values is None:
                 return None
@@ -89,19 +85,18 @@ class Job(object, metaclass=Meta):
                 abstract=True, extra_fields=extra_fields_dict,
                 reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
             )
-
-        attributes = extract_attributes(handler[2:])
+        attributes = handler[3:]
         logger.debug("Found attributes: %s" % str(attributes))
 
-        stripped = '\n'.join(['object:', '  attributes:'] + attributes)
-        payload = yaml.load(stripped, Loader=yaml.FullLoader)
+        stripped = '\n'.join(['object:', '  raw_attributes:'] + attributes)
+        payload = yaml.load(stripped, Loader=yaml.SafeLoader)
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
             job_id=job_id, attempts=attempts,
             run_at=run_at, queue=queue, database=database,
             max_attempts=max_attempts,
-            attributes=payload['object']['attributes'],
+            attributes=payload['object']['raw_attributes'],
             abstract=False, extra_fields=extra_fields_dict,
             reporter=reporter, max_backoff_delay_seconds=max_backoff_delay_seconds
         )

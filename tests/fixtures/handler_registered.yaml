@@ -8,6 +8,16 @@ object: !ruby/object:RegisteredJob
       multiline
     total_articles: 1000
     is_blind: true
+    proper_multiline: |-
+      line one
+      line two
+
+      line four
+    collapsed_first_newline: 'line one
+      abc'
+    extra_new_line: 'line one
+
+      line two'
   attributes: !ruby/object:ActiveRecord::AttributeSet
     attributes: !ruby/object:ActiveRecord::LazyAttributeHash
       types: {}
