@@ -2,6 +2,7 @@ import re
 import yaml
 from pyworker.util import get_current_time, get_time_delta
 
+
 _job_class_registry = {}
 
 def _register_class(target_class):
@@ -15,13 +16,12 @@ class Meta(type):
         return cls
 
 
-class IgnoreUnknownTagsLoader(yaml.SafeLoader):
-    """Custom YAML loader that ignores unknown Ruby object tags."""
-
-
+# Add a YAML constructor to ignore Ruby-specific tags (required once at module load time)
 def no_ruby_objects(loader, tag_suffix, node):
     # Construct mapping normally, ignoring Ruby-specific tags
     return loader.construct_mapping(node)
+
+yaml.SafeLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
 
 
 class Job(object, metaclass=Meta):
@@ -89,9 +89,7 @@ class Job(object, metaclass=Meta):
         logger.debug("Found attributes: %s" % str(attributes))
 
         stripped = '\n'.join(['object:', '  raw_attributes:'] + attributes)
-
-        IgnoreUnknownTagsLoader.add_multi_constructor("!ruby/object:", no_ruby_objects)
-        payload = yaml.load(stripped, Loader=IgnoreUnknownTagsLoader)
+        payload = yaml.load(stripped, Loader=yaml.SafeLoader)
         logger.debug("payload object: %s" % str(payload))
 
         return target_class(class_name=class_name, logger=logger,
