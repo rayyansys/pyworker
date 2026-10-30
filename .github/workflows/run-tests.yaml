@@ -12,14 +12,18 @@ jobs:
       # keep running the other versions when one fails, so failures aren't hidden
       fail-fast: false
       matrix:
+        os: [ ubuntu-latest ]
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
           - "3.14"
-    runs-on: ubuntu-latest
+        include:
+          # no Python 3.9 build exists for the current ubuntu-latest (26.04)
+          - os: ubuntu-24.04
+            python-version: "3.9"
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
