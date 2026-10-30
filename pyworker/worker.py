@@ -10,6 +10,7 @@ from pyworker.reporter import Reporter
 
 class TimeoutException(Exception): pass
 class TerminatedException(Exception): pass
+class AttemptsExhaustedException(Exception): pass
 
 class Worker(object):
     def __init__(self, dbstring, logger=None,
@@ -126,12 +127,15 @@ class Worker(object):
             now, expired = str(now), str(expired)
             queues = self.queue_names.split(',')
             queues = ', '.join(["'%s'" % q for q in queues])
-            fields = ['id', 'attempts', 'run_at', 'queue', 'handler']
+            # attempts is counted when the job is locked (see the UPDATE below), so a run
+            # that never reaches set_error_unlock (e.g. the process is OOM-killed) still
+            # uses an attempt; return the attempts made before this run
+            fields = ['id', 'attempts - 1', 'run_at', 'queue', 'handler']
             if self.extra_delayed_job_fields:
                 fields += self.extra_delayed_job_fields
             fields = ', '.join(fields)
             query = '''
-            UPDATE delayed_jobs SET locked_at = '%s', locked_by = '%s'
+            UPDATE delayed_jobs SET locked_at = '%s', locked_by = '%s', attempts = attempts + 1
             WHERE id IN (SELECT delayed_jobs.id FROM delayed_jobs
                 WHERE ((run_at <= '%s'
                 AND (locked_at IS NULL OR locked_at < '%s')
@@ -162,6 +166,12 @@ class Worker(object):
             error = failed = False
             caught_exc_info = None
             try:
+                if job.attempts >= self.max_attempts:
+                    # every previous run was counted but never finished, e.g. the
+                    # worker was killed, so fail it instead of running it again
+                    raise AttemptsExhaustedException(('Job %d was not run: it already used ' \
+                        + 'all %d attempts without finishing, the worker was likely killed ' \
+                        + '(e.g. out of memory)') % (job.job_id, self.max_attempts))
                 if job.abstract:
                     raise ValueError(('Unsupported Job: %s, please import it ' \
                         + 'before you can handle it') % job.class_name)
