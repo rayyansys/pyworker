@@ -1,7 +1,7 @@
 import datetime
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
-from pyworker.worker import Worker, TerminatedException
+from pyworker.worker import Worker, TerminatedException, AttemptsExhaustedException
 
 class TestWorker(TestCase):
     @patch('pyworker.worker.DBConnector')
@@ -105,7 +105,61 @@ class TestWorker(TestCase):
         mock_get_job.assert_called_once_with()
         mock_handle_job.assert_called_once_with(mock_get_job.return_value)
 
+    #********** .get_job tests **********#
+
+    def test_worker_get_job_counts_the_attempt_when_locking_the_job(self):
+        self.worker._cursor = MagicMock()
+        self.worker._cursor.fetchone.return_value = None
+
+        self.worker.get_job()
+
+        query = self.worker._cursor.execute.call_args[0][0]
+        self.assertIn('attempts = attempts + 1', query)
+        # the job still sees the attempts made before this run
+        self.assertIn('RETURNING\n                id, attempts - 1, run_at', query)
+
     #********** .handle_job tests **********#
+
+    def test_worker_handle_job_when_attempts_exhausted_does_not_run_job(self):
+        # all previous runs were counted but never finished, e.g. the worker was OOM-killed
+        job = self.mock_job
+        job.attempts = self.worker.max_attempts
+
+        self.worker.handle_job(job)
+
+        job.before.assert_not_called()
+        job.run.assert_not_called()
+        job.remove.assert_not_called()
+        job.set_error_unlock.assert_called_once()
+        error = job.set_error_unlock.call_args[0][0]
+        assert 'AttemptsExhaustedException' in error
+        assert 'already used all 3 attempts' in error
+
+    @patch('pyworker.worker.get_current_time')
+    def test_worker_handle_job_when_attempts_exhausted_reports_failure(self, get_current_time):
+        get_current_time.return_value = self.mocked_now
+        job = self.mock_job
+        job.attempts = self.worker.max_attempts
+        job.set_error_unlock.return_value = True
+        reporter = MagicMock()
+        self.worker.reporter = reporter
+
+        self.worker.handle_job(job)
+
+        reporter.record_exception.assert_called_once()
+        reporter.report.assert_any_call(job_failure=True)
+        reporter.report_raw.assert_any_call(error=True)
+
+    def test_worker_handle_job_when_attempts_left_runs_job(self):
+        job = self.mock_job
+        job.attempts = self.worker.max_attempts - 1
+
+        self.worker.handle_job(job)
+
+        job.run.assert_called_once()
+        job.remove.assert_called_once()
+        job.set_error_unlock.assert_not_called()
+
 
     def assert_instrument_context_reports_custom_attributes(self, job, reporter):
         reporter.recorder.assert_called_once()

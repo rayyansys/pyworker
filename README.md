@@ -96,6 +96,9 @@ configuration options:
 w.sleep_delay = 3
 
 # maximum attempts before marking the job as permanently failing (default 3)
+# an attempt is counted when a job is picked up, so runs that never finish
+# (e.g. the worker is OOM-killed) also count; a job that already used all
+# its attempts is marked as failed instead of being run again
 w.max_attempts = 5
 
 # sets a cap on how long a worker should wait between retry attempts.
