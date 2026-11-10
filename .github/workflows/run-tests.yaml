@@ -9,19 +9,26 @@ on:
 jobs:
   test:
     strategy:
+      # keep running the other versions when one fails, so failures aren't hidden
+      fail-fast: false
       matrix:
+        os: [ ubuntu-latest ]
         python-version:
-          - "3.8"
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
-    runs-on: ubuntu-latest
+          - "3.13"
+          - "3.14"
+        include:
+          # no Python 3.9 build exists for the current ubuntu-latest (26.04)
+          - os: ubuntu-24.04
+            python-version: "3.9"
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
