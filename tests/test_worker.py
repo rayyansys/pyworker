@@ -118,6 +118,18 @@ class TestWorker(TestCase):
         # the job still sees the attempts made before this run
         self.assertIn('RETURNING\n                id, attempts - 1, run_at', query)
 
+    def test_worker_get_job_commits_the_lock_and_attempt_before_running(self):
+        # an uncommitted UPDATE would be rolled back if the process is killed during run()
+        self.worker._cursor = MagicMock()
+        self.worker._cursor.fetchone.return_value = None
+        calls = MagicMock()
+        calls.attach_mock(self.worker._cursor.fetchone, 'fetchone')
+        calls.attach_mock(self.worker.database.commit, 'commit')
+
+        self.worker.get_job()
+
+        self.assertEqual([c[0] for c in calls.mock_calls], ['fetchone', 'commit'])
+
     #********** .handle_job tests **********#
 
     def test_worker_handle_job_when_attempts_exhausted_does_not_run_job(self):

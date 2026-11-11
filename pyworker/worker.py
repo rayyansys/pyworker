@@ -146,7 +146,11 @@ class Worker(object):
             ''' % (now, self.name, now, expired, self.name, queues, fields)
             self.logger.debug('query: %s' % query)
             self._cursor.execute(query)
-            return self._cursor.fetchone()
+            row = self._cursor.fetchone()
+            # commit the lock and the attempt now: if the process is killed while the
+            # job runs, an uncommitted UPDATE would be rolled back with it
+            self.database.commit()
+            return row
 
         job_row = get_job_row()
         if job_row:
